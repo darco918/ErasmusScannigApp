@@ -2,7 +2,26 @@
 
 export const BASE_CURRENCY = 'EUR';
 
+// Countries participants come from.
 export const COUNTRIES = ['Bulgaria', 'Hungary', 'Poland', 'Romania', 'Spain', 'Turkey', 'Other'];
+
+// Countries an event can be hosted in (chosen per project on the tablet).
+export const HOST_COUNTRIES = [
+  'Albania', 'Austria', 'Belgium', 'Bosnia and Herzegovina', 'Bulgaria', 'Croatia', 'Cyprus', 'Czechia',
+  'Denmark', 'Estonia', 'Finland', 'France', 'Germany', 'Greece', 'Hungary', 'Iceland', 'Ireland', 'Italy',
+  'Kosovo', 'Latvia', 'Liechtenstein', 'Lithuania', 'Luxembourg', 'Malta', 'Moldova', 'Montenegro',
+  'Netherlands', 'North Macedonia', 'Norway', 'Poland', 'Portugal', 'Romania', 'Serbia', 'Slovakia',
+  'Slovenia', 'Spain', 'Sweden', 'Switzerland', 'Turkey', 'Ukraine', 'United Kingdom',
+];
+
+// Countries offered for the From / To of a journey: participant countries plus the host.
+export function routeCountries(hostCountry) {
+  const list = COUNTRIES.filter((c) => c !== 'Other');
+  if (hostCountry && !list.includes(hostCountry)) list.push(hostCountry);
+  return [...list.sort(), 'Other'];
+}
+
+export const TRANSPORT = ['PLANE', 'CARPOOLING', 'BUS', 'TRAIN'];
 
 // Currencies a receipt can be in. Exchange rates for these are entered on the tablet.
 export const CURRENCIES = ['EUR', 'BGN', 'HUF', 'PLN', 'RON', 'TRY', 'GBP', 'USD', 'CHF', 'CZK'];
@@ -34,6 +53,23 @@ export const LIMITS = {
   maxFileBytes: 25 * 1024 * 1024,
 };
 
-export function publicConfig() {
-  return { BASE_CURRENCY, COUNTRIES, CURRENCIES, OCR_LANGUAGES, COUNTRY_DEFAULTS, LIMITS };
+export function publicConfig(project) {
+  return {
+    BASE_CURRENCY,
+    COUNTRIES,
+    HOST_COUNTRIES,
+    TRANSPORT,
+    CURRENCIES,
+    OCR_LANGUAGES,
+    COUNTRY_DEFAULTS,
+    LIMITS,
+    project: project && {
+      id: project.id,
+      title: project.title,
+      startDate: project.startDate,
+      endDate: project.endDate,
+      hostCountry: project.hostCountry,
+      routeCountries: routeCountries(project.hostCountry),
+    },
+  };
 }

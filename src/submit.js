@@ -115,10 +115,20 @@ export function submissionHandler(store) {
 
       const submissionId = typeof data.submissionId === 'string' ? data.submissionId.slice(0, 64) : '';
       if (!/^[\w-]{8,64}$/.test(submissionId)) throw new ValidationError({ form: 'Missing submission id.' });
-      const existing = store.state.submissionIds[submissionId];
+      // Phones always submit to the project that is active on the tablet. If the
+      // admin switched projects while this form was open, ask the phone to reload.
+      const project = store.activeProject();
+      if (!project) throw new ValidationError({ project: 'The organiser has not started a project yet.' });
+      if (data.projectId !== project.id) {
+        throw new ValidationError({ project: 'The organiser has changed the project. Please reload the page and send again.' });
+      }
+      const projectId = project.id;
+      const findUser = (id) => project.users.find((u) => u.id === id);
+
+      const existing = project.submissionIds[submissionId];
       if (existing) {
         // The phone retried after a dropped connection: the first attempt already counted.
-        const user = store.findUser(existing);
+        const user = findUser(existing);
         res.json({ ok: true, duplicate: true, number: user?.number ?? null, receiptCount: user?.receipts.length ?? 0 });
         return;
       }
@@ -143,7 +153,19 @@ export function submissionHandler(store) {
         if (!type) throw new ValidationError({ receipts: `${label}: only photos (JPEG, PNG, WebP, HEIC) and PDFs are accepted.` });
         let fields;
         try {
-          fields = validateReceipt({ amount: item.amount, currency: item.currency, date: item.date || '', vendor: item.vendor || '' });
+          fields = validateReceipt(
+            {
+              amount: item.amount,
+              currency: item.currency,
+              date: item.date || '',
+              transport: item.transport || '',
+              fromCity: item.fromCity || '',
+              fromCountry: item.fromCountry || '',
+              toCity: item.toCity || '',
+              toCountry: item.toCountry || '',
+            },
+            { required: true },
+          );
         } catch (err) {
           throw new ValidationError({ receipts: `${label}: ${err.message}` });
         }
@@ -164,11 +186,15 @@ export function submissionHandler(store) {
         };
       });
 
-      const user = await store.update(async (state) => {
+      const user = await store.update(async () => {
+        // Look the project up again: the object read earlier may be stale by now.
+        const project = store.project(projectId);
+        if (!project) throw new ValidationError({ project: 'The project no longer exists.' });
+        const findUser = (id) => project.users.find((u) => u.id === id);
         // Two copies of the same retry can race past the check above.
-        if (state.submissionIds[submissionId]) return store.findUser(state.submissionIds[submissionId]);
+        if (project.submissionIds[submissionId]) return findUser(project.submissionIds[submissionId]);
         const id = crypto.randomUUID();
-        const dir = store.userDir(id);
+        const dir = store.userDir(project.id, id);
         await fsp.mkdir(dir, { recursive: true });
         try {
           for (const r of receipts) {
@@ -182,10 +208,10 @@ export function submissionHandler(store) {
           await fsp.rm(dir, { recursive: true, force: true });
           throw err;
         }
-        const record = { id, number: state.nextUserNumber, submittedAt: new Date().toISOString(), ...details, receipts };
-        state.nextUserNumber += 1;
-        state.users.push(record);
-        state.submissionIds[submissionId] = id;
+        const record = { id, number: project.nextUserNumber, submittedAt: new Date().toISOString(), ...details, capEur: null, receipts };
+        project.nextUserNumber += 1;
+        project.users.push(record);
+        project.submissionIds[submissionId] = id;
         return record;
       });
       res.status(201).json({ ok: true, number: user.number, receiptCount: user.receipts.length });

@@ -1,10 +1,12 @@
 # Travel receipts app
 
-An offline web app that runs on an Android tablet. Participants join the
-tablet's Wi-Fi hotspot with their phones, fill in their details and upload
-photos or PDFs of their travel receipts. The tablet is the admin view: it
-shows every participant, converts all amounts to EUR, and exports the
-documents to print and sign, an Excel summary and a ZIP of all originals.
+An offline web app that runs on an Android tablet. The tablet and the
+participants' phones join the same Wi-Fi (a phone's hotspot or a small travel
+router, no internet needed). Participants fill in their details and upload
+photos or PDFs of their travel tickets and receipts. The tablet is the admin
+view: it shows every participant, converts all amounts to EUR, and exports a
+filled-in "Travel costs reimbursement form" per person to print and sign, an
+Excel summary and a ZIP of all originals.
 
 No internet connection is needed while the app runs. Internet is only needed
 once, to install it.
@@ -14,11 +16,17 @@ once, to install it.
 - **Tablet** runs a small Node.js server in [Termux](https://termux.dev).
   Everything is stored on the tablet: `data/db.json` holds the details and
   amounts, `data/uploads/` holds every original file exactly as it was sent.
+- **Projects**: the first time the admin view opens it asks for the project
+  title, project number, host country and first/last day. Phones always submit
+  to the *active* project. **New project** starts an empty one; earlier
+  projects are never deleted and can be opened, edited, exported or made
+  active again from the project list.
 - **Phones** open `http://<tablet address>:8080/` in their browser. Each
-  receipt is read on the phone itself (Tesseract OCR for photos and scanned
-  PDFs, pdf.js for PDFs with real text). The detected total, currency, date
-  and vendor are filled in for the participant to check and correct.
-  Participants can send only once.
+  receipt is one journey (one row of the form). It is read on the phone itself
+  (Tesseract OCR for photos and scanned PDFs, pdf.js for PDFs with real text):
+  amount, currency, date, means of transport (PLANE, CARPOOLING, BUS, TRAIN)
+  and From/To city and country are suggested for the participant to check.
+  From, To, transport and date are required. Participants can send only once.
 - **Admin view** opens only in a browser on the tablet itself, at
   `http://localhost:8080/admin`. Phones get "403 forbidden" there.
 
@@ -52,7 +60,9 @@ receipt).
 
 ## Running it (offline)
 
-1. Turn on the tablet's **Wi-Fi hotspot**. Mobile data can stay off.
+1. Turn on the Wi-Fi network: a phone's **hotspot** (mobile data can be off)
+   or a travel router. Connect the tablet to it. Phones join the same network.
+   Phone hotspots usually allow about 8–10 devices at a time.
 2. In Termux:
 
    ```sh
@@ -65,35 +75,48 @@ receipt).
 3. Open **Chrome on the tablet** at `http://localhost:8080/admin`.
 4. Press **Show QR code**. Participants scan it after joining the hotspot.
 5. Enter the **exchange rates** (how many units one euro buys, e.g.
-   `1 EUR = 395.50 HUF`) under *Exchange rates and settings*. You can do this
-   before or after people submit. Totals update straight away.
+   `1 EUR = 395.50 HUF`) under *Exchange rates and settings*. Rates belong to
+   the project. You can do this before or after people submit; totals update
+   straight away.
+
+The very first time, step 3 shows **Set up your project** instead.
 
 Stop the server with `Ctrl+C` in Termux. Data is kept between runs.
 
 ### If phones cannot open the page
 
-- The QR code or address must be the tablet's **hotspot** address, usually
-  `192.168.x.1`. If the admin page shows no address or a wrong one, find the
-  address under Settings → Network → Hotspot → connected devices, or run
-  `ip -4 addr` in Termux and use the `inet` address of the `wlan`/`ap`/`swlan`
-  interface. Enter it as `http://192.168.x.1:8080/` under *Phone address*
+- The address can change each time the tablet joins a network, so open the
+  QR code after connecting. If the admin page shows no address or a wrong one,
+  run `ip -4 addr | grep inet` in Termux and use the address that is not
+  `127.0.0.1`. Enter it as `http://THAT-ADDRESS:8080/` under *Phone address*
   in the admin settings.
+- Some phones do not let other devices reach the phone sharing the hotspot.
+  Participants on *other* phones joining the hotspot are not affected.
 - Phones may warn that the Wi-Fi "has no internet". Choose **Stay connected**.
   If a phone keeps switching away, turn off its mobile data while uploading.
 - The server must be running in Termux (the notification must show).
 
 ## Exports (admin view)
 
-- **All documents (one PDF)**: one document per participant, each starting
-  on a new page, ready to print and sign.
-- **Excel summary**: *Summary* sheet with one row per participant and their
-  EUR total, plus the group total at the bottom. *Receipts* sheet with every
-  receipt (original amount, currency, rate, EUR). *Rates* sheet. Totals are
-  live Excel formulas.
+All exports are for the project being viewed.
+
+- **All forms (one PDF)**: the "Travel costs reimbursement form", one page per
+  participant, ready to print and sign. Each accepted receipt is a row (From,
+  To, means of transport, date, price in the other currency, price in EUR);
+  more than 13 rows shrink to stay on one page. The exchange rates row lists
+  the rates that person's receipts used. The confirmation sentence states the
+  amount to reimburse, and the date at the bottom is the project's last day.
+- **Excel summary**: *Summary* sheet with one row per participant (sum,
+  optional cap, reimbursed) and the group total. *Receipts* sheet with every
+  receipt. *Rates* and *Project* sheets. Totals are live Excel formulas.
 - **Everything (ZIP)**: `Country / 001 Lastname Firstname /` with each
-  participant's original receipts and their document. Rejected receipts go
-  in a `Rejected` subfolder. The combined PDF and the Excel file are at the
-  top level.
+  participant's original receipts and their form. Rejected receipts go in a
+  `Rejected` subfolder. The combined PDF and the Excel file are at the top
+  level.
+
+A **cap** (maximum reimbursement in EUR) can be set for an individual
+participant on their page. The form's "Total 100%" still shows the full sum;
+the confirmation sentence shows the capped amount.
 
 Rejected receipts and receipts in a currency without a rate are left out of
 the totals. Missing rates are flagged in the admin view, the documents and
@@ -101,17 +124,13 @@ the Excel file.
 
 ## Backups
 
-Everything is in the `data` folder. Copy it somewhere safe from time to time,
+Everything is in the `data` folder, saved on every change, so stopping the
+server or the tablet loses nothing. Once a day the app also keeps a dated copy
+of the database in `data/backups/`. Copy it somewhere safe from time to time,
 for example `cp -r data ~/storage/downloads/receipts-backup` after running
 `termux-setup-storage`. To keep data somewhere else, start the server with
 `DATA_DIR=/path/to/folder npm start`. Use `PORT=9000 npm start` for another
 port.
-
-## Still to do
-
-- **Document template**: `src/documents.js` draws a placeholder layout. It
-  will be replaced with the real template once it is supplied.
-- **Spending rules** (caps or excluded expenses): to be specified.
 
 ## Development
 
@@ -124,5 +143,7 @@ npm run e2e        # browser test with real OCR (needs Playwright + Chromium)
 
 Layout: `server.js` starts the server. `src/` holds the server code (storage,
 validation, exports). `public/` is the phone page, and
-`public/js/receipt-parse.js` is the receipt-reading logic. `admin/` is the
-tablet view.
+`public/js/receipt-parse.js` is the receipt-reading logic (with known cities
+and airport codes in `public/js/places.js`). `src/documents.js` draws the form.
+`admin/` is the tablet view. `assets/fonts/` holds Liberation Sans (SIL Open
+Font License), metric-compatible with Arial as used by the template.

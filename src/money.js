@@ -31,11 +31,17 @@ export function userSummary(user, rates) {
     }
     return { ...r, rate, eur };
   });
+  const sumEur = round2(totalEur);
+  // An optional per-person cap, set by the admin, limits what is reimbursed.
+  const cap = typeof user.capEur === 'number' ? user.capEur : null;
   return {
     receipts,
     acceptedCount: accepted,
     rejectedCount: user.receipts.length - accepted,
-    totalEur: round2(totalEur),
+    sumEur,
+    capEur: cap,
+    capped: cap !== null && sumEur > cap,
+    totalEur: cap !== null ? Math.min(sumEur, cap) : sumEur,
     missingRates: [...missingRates].sort(),
   };
 }

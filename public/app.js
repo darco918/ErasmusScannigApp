@@ -58,6 +58,7 @@ function addFiles(files) {
 function buildCard(receipt) {
   const el = {};
   const field = (name, input) => {
+    input.name = name;
     input.addEventListener('input', () => {
       receipt.touched.add(name);
       el.card.classList.remove('invalid');
@@ -66,6 +67,19 @@ function buildCard(receipt) {
     el[name] = input;
     return input;
   };
+
+  function placeFields(title, key) {
+    return h('fieldset', { class: 'place' },
+      h('legend', {}, title),
+      h('div', { class: 'grid two' },
+        h('label', {}, 'City', field(`${key}City`, h('input', { maxlength: 100, autocomplete: 'off' }))),
+        h('label', {}, 'Country', field(`${key}Country`, h('select', {},
+          h('option', { value: '' }, 'Choose…'),
+          config.project.routeCountries.map((c) => h('option', { value: c }, c)),
+        ))),
+      ),
+    );
+  }
 
   el.thumb = h('div', { class: 'thumb' }, isPdf(receipt.file) ? 'PDF' : '');
   if (!isPdf(receipt.file)) {
@@ -90,9 +104,14 @@ function buildCard(receipt) {
     h('div', { class: 'grid fields' },
       h('label', {}, 'Amount', field('amount', h('input', { inputmode: 'decimal', autocomplete: 'off', placeholder: '0.00' }))),
       h('label', {}, 'Currency', field('currency', h('select', {}, config.CURRENCIES.map((c) => h('option', { value: c }, c))))),
-      h('label', {}, 'Date', field('date', h('input', { type: 'date' }))),
-      h('label', {}, 'Vendor', field('vendor', h('input', { maxlength: 200, placeholder: 'Shop, airline, hotel…' }))),
+      h('label', {}, 'Travel date', field('date', h('input', { type: 'date' }))),
+      h('label', {}, 'Means of transport', field('transport', h('select', {},
+        h('option', { value: '' }, 'Choose…'),
+        config.TRANSPORT.map((t) => h('option', { value: t }, t)),
+      ))),
     ),
+    placeFields('From', 'from'),
+    placeFields('To', 'to'),
     h('div', { class: 'receipt-foot' },
       h('label', { class: 'inline small' }, 'Language', el.lang),
       h('button', { type: 'button', class: 'link', onclick: () => rescan(receipt) }, 'Read again'),
@@ -122,7 +141,15 @@ function applyScan(receipt, result) {
   if (!touched.has('amount') && result.amount) el.amount.value = result.amount.toFixed(2);
   if (!touched.has('currency') && result.currency && config.CURRENCIES.includes(result.currency)) el.currency.value = result.currency;
   if (!touched.has('date') && result.date) el.date.value = result.date;
-  if (!touched.has('vendor') && result.vendor) el.vendor.value = result.vendor;
+  if (!touched.has('transport') && result.transport) el.transport.value = result.transport;
+  for (const key of ['from', 'to']) {
+    const city = result[`${key}City`];
+    if (!city || touched.has(`${key}City`) || touched.has(`${key}Country`)) continue;
+    el[`${key}City`].value = city;
+    // Countries outside this project's list are recorded as "Other".
+    const country = result[`${key}Country`];
+    el[`${key}Country`].value = config.project.routeCountries.includes(country) ? country : 'Other';
+  }
 }
 
 let busy = false;
@@ -203,10 +230,17 @@ function collect() {
   const items = [];
   for (const [i, r] of receipts.entries()) {
     const amount = parseAmount(r.el.amount.value.trim());
-    if (!amount || amount <= 0) {
+    const missing = [
+      [!amount || amount <= 0, 'the amount'],
+      [!r.el.date.value, 'the travel date'],
+      [!r.el.transport.value, 'the means of transport'],
+      [!r.el.fromCity.value.trim() || !r.el.fromCountry.value, 'where the journey started (From)'],
+      [!r.el.toCity.value.trim() || !r.el.toCountry.value, 'where it ended (To)'],
+    ].filter(([bad]) => bad).map(([, what]) => what);
+    if (missing.length) {
       r.el.card.classList.add('invalid');
       r.el.card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      showError(`Receipt ${i + 1}: please enter the amount.`);
+      showError(`Receipt ${i + 1}: please fill in ${missing.join(', ')}.`);
       return null;
     }
     items.push({
@@ -214,12 +248,17 @@ function collect() {
       amount,
       currency: r.el.currency.value,
       date: r.el.date.value,
-      vendor: r.el.vendor.value.trim(),
+      transport: r.el.transport.value,
+      fromCity: r.el.fromCity.value.trim(),
+      fromCountry: r.el.fromCountry.value,
+      toCity: r.el.toCity.value.trim(),
+      toCountry: r.el.toCountry.value,
       scan: r.scan && { amount: r.scan.amount, currency: r.scan.currency, confidence: r.scan.confidence, lang: r.scan.lang },
     });
   }
   return {
     submissionId,
+    projectId: config.project.id,
     firstName: form.firstName.value.trim(),
     lastName: form.lastName.value.trim(),
     dob: form.dob.value,
@@ -282,8 +321,21 @@ form.addEventListener('submit', async (event) => {
 
 // ---------- start ----------
 
+function eventDates(start, end) {
+  const fmt = (iso, opts) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { timeZone: 'UTC', ...opts });
+  if (start === end) return fmt(start, { day: 'numeric', month: 'long', year: 'numeric' });
+  return `${fmt(start, { day: 'numeric', month: 'long' })} – ${fmt(end, { day: 'numeric', month: 'long', year: 'numeric' })}`;
+}
+
 async function start() {
   config = await (await fetch('/api/config')).json();
+  if (!config.project) {
+    $('#form-view').hidden = true;
+    $('#closed-view').hidden = false;
+    return;
+  }
+  $('#project-title').textContent = config.project.title;
+  $('#project-dates').textContent = eventDates(config.project.startDate, config.project.endDate);
   for (const c of config.COUNTRIES) form.country.append(h('option', { value: c }, c));
   defaultLang.append(...languageOptions('eng'));
   form.dob.max = new Date().toISOString().slice(0, 10);

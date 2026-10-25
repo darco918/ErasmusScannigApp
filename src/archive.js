@@ -1,5 +1,5 @@
-// ZIP export: Country / Participant / receipts + their document, plus the
-// combined PDF and the Excel summary at the top level.
+// ZIP export of one project: Country / Participant / receipts + their form,
+// plus the combined PDF and the Excel summary at the top level.
 
 import { ZipArchive } from 'archiver';
 import path from 'node:path';
@@ -26,10 +26,10 @@ export function receiptFileName(receipt) {
   return `${String(receipt.number).padStart(2, '0')} ${safeName(base, 60)}${ext}`;
 }
 
-export async function streamArchive(res, store, stamp) {
-  const { users, settings } = store.state;
-  const root = `receipts-${stamp}`;
-  const [combined, workbook] = await Promise.all([renderDocuments(users, settings.rates), renderWorkbook(users, settings.rates)]);
+export async function streamArchive(res, store, project, stamp) {
+  const users = project.users;
+  const root = safeName(`${project.title} ${stamp}`);
+  const [combined, workbook] = await Promise.all([renderDocuments(project, users), renderWorkbook(project, users)]);
 
   const zip = new ZipArchive({ zlib: { level: 6 } });
   const done = new Promise((resolve, reject) => {
@@ -39,14 +39,14 @@ export async function streamArchive(res, store, stamp) {
   res.attachment(`${root}.zip`);
   zip.pipe(res);
 
-  zip.append(Buffer.from(combined), { name: `${root}/All documents.pdf` });
+  zip.append(Buffer.from(combined), { name: `${root}/All forms.pdf` });
   zip.append(workbook, { name: `${root}/Summary.xlsx` });
   for (const user of users) {
     const folder = `${root}/${safeName(user.country)}/${userFolderName(user)}`;
-    zip.append(Buffer.from(await renderDocuments([user], settings.rates)), { name: `${folder}/Document.pdf` });
+    zip.append(Buffer.from(await renderDocuments(project, [user])), { name: `${folder}/Form.pdf` });
     for (const r of user.receipts) {
       const sub = r.status === 'rejected' ? `${folder}/Rejected` : folder;
-      zip.file(path.join(store.userDir(user.id), r.file.storedName), { name: `${sub}/${receiptFileName(r)}` });
+      zip.file(path.join(store.userDir(project.id, user.id), r.file.storedName), { name: `${sub}/${receiptFileName(r)}` });
     }
   }
   await zip.finalize();

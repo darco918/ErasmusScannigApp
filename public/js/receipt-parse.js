@@ -5,6 +5,8 @@
 // Shared by the browser (phone page) and the Node tests, so it must stay
 // dependency-free plain JavaScript.
 
+import { AIRPORTS, CITIES } from './places.js';
+
 // Lowercase, strip accents and fold letters OCR often confuses, so that
 // "ÖSSZESEN", "osszesen" and "Összesen" all match the same keyword.
 export function fold(text) {
@@ -69,14 +71,12 @@ const CURRENCY_REGEXES = Object.entries(CURRENCY_PATTERNS).map(([code, words]) =
   words.map((w) => (/^\p{L}/u.test(w) ? wordPattern(w) : new RegExp(w.replace(/[$]/g, '\\$'), 'u'))),
 ]);
 
-const DOCUMENT_WORDS = [
-  'receipt', 'invoice', 'tax invoice', 'ticket', 'welcome', 'bon fiscal', 'factura', 'factură', 'nyugta', 'számla',
-  'fiş', 'fiş no', 'fatura', 'bienvenido', 'paragon', 'paragon fiskalny', 'faktura', 'фактура', 'касова бележка',
-  'фискален бон', 'бон',
-].map(wordPattern);
-
 const DATE_YMD = /(?<!\d)(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})\.?(?!\d)/g;
 const DATE_DMY = /(?<!\d)(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4}|\d{2})(?!\d)/g;
+const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH = `(${MONTH_KEYS.join('|')})[a-z]*\\.?`;
+const DATE_DAY_MONTH = new RegExp(`(?<!\\d)(\\d{1,2})\\s*${MONTH},?\\s*(\\d{4})?(?!\\d)`, 'g');
+const DATE_MONTH_DAY = new RegExp(`(?<![a-z])${MONTH}\\s+(\\d{1,2}),?\\s+(\\d{4})(?!\\d)`, 'g');
 const TIME = /(?<!\d)\d{1,2}:\d{2}(?::\d{2})?(?!\d)/g;
 const PERCENT = /\d+(?:[.,]\d+)?\s?%/g;
 const AMOUNT = /(?<![\d.,])(\d{1,3}(?:[ \u00a0\u202f.,']\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?!\d)/g;
@@ -109,7 +109,8 @@ function validDate(y, m, d) {
   const date = new Date(Date.UTC(y, m - 1, d));
   if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return null;
   const now = new Date();
-  if (y < 2000 || date.getTime() > now.getTime() + 2 * 86400000) return null;
+  // Tickets for the journey home can be dated after the day of submission.
+  if (y < 2000 || date.getTime() > now.getTime() + 400 * 86400000) return null;
   return date.toISOString().slice(0, 10);
 }
 
@@ -122,6 +123,16 @@ export function findDate(text) {
   for (const m of text.matchAll(DATE_DMY)) {
     // Day first: none of the target countries writes month first.
     const iso = validDate(+m[3], +m[2], +m[1]);
+    if (iso) found.push({ index: m.index, iso });
+  }
+  // "12 Aug 2026", "12AUG" (boarding passes), "Aug 12, 2026".
+  const folded = fold(text);
+  for (const m of folded.matchAll(DATE_DAY_MONTH)) {
+    const iso = validDate(m[3] ? +m[3] : new Date().getFullYear(), MONTH_KEYS.indexOf(m[2]) + 1, +m[1]);
+    if (iso) found.push({ index: m.index, iso });
+  }
+  for (const m of folded.matchAll(DATE_MONTH_DAY)) {
+    const iso = validDate(+m[3], MONTH_KEYS.indexOf(m[1]) + 1, +m[2]);
     if (iso) found.push({ index: m.index, iso });
   }
   found.sort((a, b) => a.index - b.index);
@@ -184,17 +195,6 @@ function findTotal(lines) {
     .reduce((a, b) => (b.value > a.value ? b : a));
 }
 
-function findVendor(lines) {
-  for (const line of lines.slice(0, 6)) {
-    const letters = (line.match(/\p{L}/gu) || []).length;
-    if (letters < 3 || letters < line.replace(/\s/g, '').length / 2) continue;
-    if (DOCUMENT_WORDS.some((re) => re.test(fold(line)) && fold(line).replace(re, '').trim().length < 3)) continue;
-    const cleaned = line.replace(/\s+/g, ' ').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}.)]+$/gu, '').trim();
-    if (cleaned.length >= 3) return cleaned.slice(0, 80);
-  }
-  return null;
-}
-
 // Main entry point. `hints.currency` is the fallback when the text shows none.
 export function parseReceipt(text, hints = {}) {
   const normalized = String(text || '').normalize('NFC');
@@ -222,6 +222,87 @@ export function parseReceipt(text, hints = {}) {
     confidence,
     currency: currency || findCurrency(normalized) || hints.currency || null,
     date: findDate(normalized),
-    vendor: findVendor(lines),
+    transport: findTransport(normalized),
+    ...findRoute(normalized),
   };
+}
+
+// ---------- means of transport ----------
+
+const TRANSPORT_WORDS = {
+  PLANE: [
+    'flight', 'flug', 'boarding pass', 'boarding', 'airline', 'airlines', 'airways', 'airport', 'aeroport', 'aeropuerto',
+    'wizz', 'wizz air', 'ryanair', 'easyjet', 'lufthansa', 'tarom', 'pegasus', 'turkish airlines', 'aegean', 'lot polish',
+    'bulgaria air', 'iberia', 'vueling', 'air europa', 'austrian', 'repülő', 'repülőjegy', 'repülőtér', 'zbor', 'uçuş',
+    'havalimanı', 'vuelo', 'lotnisko', 'samolot', 'полет', 'летище', 'самолет', 'самолетен', 'uçak', 'uçağı', 'avión',
+    'zborul', 'avion', 'lotu', 'samolotem', 'boarding-pass', 'бордна карта',
+  ],
+  TRAIN: [
+    'train', 'rail', 'railway', 'railways', 'intercity', 'máv', 'mav-start', 'cfr', 'cfr călători', 'tcdd', 'renfe', 'pkp',
+    'bdž', 'бдж', 'vonat', 'vasút', 'tren', 'pociąg', 'kolej', 'koleje', 'влак', 'ouigo', 'iryo', 'regiojet', 'öbb', 'yht',
+    'polregio', 'interregio', 'pendolino', 'vonatjegy', 'trenul', 'pociągu', 'kolejowy', 'влакът', 'жп',
+    'treni', 'tren bileti', 'ferrocarril',
+  ],
+  BUS: [
+    'bus', 'coach', 'flixbus', 'autobus', 'busz', 'volánbusz', 'otobüs', 'autocar', 'alsa', 'автобус', 'autogara', 'otogar',
+    'dworzec autobusowy', 'havaist', 'автогара', 'union ivkoni', 'автобусен', 'автобусна', 'автобусни', 'buszjegy',
+    'autobuz', 'autobuzul', 'autobusowy', 'autobusu', 'otobüsü', 'autobús', 'autocares',
+  ],
+  CARPOOLING: ['blablacar', 'carpool', 'carpooling', 'covoiturage', 'ride share', 'rideshare'],
+};
+const TRANSPORT_REGEXES = Object.entries(TRANSPORT_WORDS).map(([mode, words]) => [mode, words.map(wordPattern)]);
+
+export function findTransport(text) {
+  const folded = fold(text);
+  let best = null;
+  for (const [mode, regexes] of TRANSPORT_REGEXES) {
+    const hits = regexes.filter((re) => re.test(folded)).length;
+    if (hits && (!best || hits > best.hits)) best = { mode, hits };
+  }
+  return best ? best.mode : null;
+}
+
+// ---------- from / to ----------
+
+const CITY_PATTERNS = CITIES.flatMap(([city, country, ...aliases]) =>
+  [city, ...aliases].map((name) => ({ re: new RegExp(wordPattern(name).source, 'gu'), city, country })),
+);
+const CITY_BY_NAME = new Map(CITIES.map(([city, country]) => [city, country]));
+const AIRPORT_PAIR = /(?<![A-Z])([A-Z]{3})\s*(?:-+|–|—|→|->|>|\/|to)\s*([A-Z]{3})(?![A-Z])/g;
+// What may stand between two cities for them to read as "from - to".
+const ROUTE_GAP = /^[ \t]*(?:-+>?|–|—|→|=>|>|\/|to|a|la|do|до|nach|hacia|spre)?[ \t]*$/u;
+
+function cityMentions(folded) {
+  const found = [];
+  for (const { re, city, country } of CITY_PATTERNS) {
+    for (const m of folded.matchAll(re)) found.push({ start: m.index, end: m.index + m[0].length, city, country });
+  }
+  // Longest name wins where two overlap ("Palma de Mallorca" over "Palma").
+  found.sort((a, b) => a.start - b.start || b.end - a.end);
+  return found.filter((m, i) => !found.slice(0, i).some((o) => o.start <= m.start && o.end >= m.end && o !== m));
+}
+
+function route(from, to) {
+  return { fromCity: from.city, fromCountry: from.country, toCity: to.city, toCountry: to.country };
+}
+
+export function findRoute(text) {
+  // 1. Airport codes written as a pair: "SOF - BUD".
+  for (const m of String(text).matchAll(AIRPORT_PAIR)) {
+    const [from, to] = [AIRPORTS[m[1]], AIRPORTS[m[2]]];
+    if (from && to && from !== to) {
+      return route({ city: from, country: CITY_BY_NAME.get(from) }, { city: to, country: CITY_BY_NAME.get(to) });
+    }
+  }
+  const folded = fold(text);
+  const mentions = cityMentions(folded);
+  // 2. Two cities joined by a dash, arrow or "to": "Budapest - Sofia".
+  for (let i = 0; i + 1 < mentions.length; i++) {
+    const [a, b] = [mentions[i], mentions[i + 1]];
+    if (a.city !== b.city && ROUTE_GAP.test(folded.slice(a.end, b.start))) return route(a, b);
+  }
+  // 3. Otherwise the first two different cities, in reading order.
+  const second = mentions.find((m) => mentions.length && m.city !== mentions[0].city);
+  if (second) return route(mentions[0], second);
+  return { fromCity: null, fromCountry: null, toCity: null, toCountry: null };
 }

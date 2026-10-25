@@ -10,11 +10,21 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>Travel expenses</h1>
+    <div>
+      <h1 id="project-title">Travel expenses</h1>
+      <p id="project-dates" class="muted"></p>
+    </div>
   </header>
 
+  <main id="closed-view" class="page" hidden>
+    <section class="card">
+      <h2>Not open yet</h2>
+      <p class="hint">The organiser has not started a project on the tablet yet. Please try again in a moment.</p>
+    </section>
+  </main>
+
   <main id="form-view" class="page">
-    <p class="intro">Fill in your details and add a photo or PDF of every travel receipt and invoice. Check the amounts, then send everything in one go.</p>
+    <p class="intro">Fill in your details and add a photo or PDF of every travel ticket, receipt and invoice. Each one is a journey: check the amount, date, transport and where you travelled from and to, then send everything in one go.</p>
 
     <form id="claim" novalidate>
       <section class="card">

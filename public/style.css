@@ -52,6 +52,7 @@ body {
   flex-wrap: wrap;
 }
 .topbar h1 { font-size: 1.2rem; margin: 0; }
+.topbar p { margin: 2px 0 0; }
 
 .page { max-width: 720px; margin: 0 auto; padding: 16px; }
 .intro { margin: 4px 0 16px; color: var(--muted); }
@@ -129,6 +130,8 @@ button.link {
 .receipt-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .receipt-title progress { width: 100%; height: 6px; }
 .status { font-size: .9rem; }
+fieldset.place { border: none; padding: 0; margin: 12px 0 0; min-width: 0; }
+fieldset.place legend { font-weight: 700; padding: 0; margin-bottom: 6px; }
 .receipt-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 
 .thumb {

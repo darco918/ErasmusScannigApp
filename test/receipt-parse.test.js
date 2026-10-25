@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAmount, parseReceipt, findDate } from '../public/js/receipt-parse.js';
+import { parseAmount, parseReceipt, findDate, findRoute, findTransport } from '../public/js/receipt-parse.js';
 
 test('parseAmount handles European and English number formats', () => {
   assert.equal(parseAmount('45,90'), 45.9);
@@ -19,6 +19,33 @@ test('findDate reads day-first and year-first dates', () => {
   assert.equal(findDate('2025.05.12. 14:33'), '2025-05-12');
   assert.equal(findDate('Fecha 03/02/2025'), '2025-02-03');
   assert.equal(findDate('31.02.2025'), null);
+  assert.equal(findDate('Date: 12 August 2026'), '2026-08-12');
+  assert.equal(findDate('Departure Aug 9, 2026 06:40'), '2026-08-09');
+});
+
+test('findTransport recognises the means of transport', () => {
+  assert.equal(findTransport('Wizz Air\nBoarding pass\nGate B12'), 'PLANE');
+  assert.equal(findTransport('PKP Intercity S.A.\nBilet normalny'), 'TRAIN');
+  assert.equal(findTransport('MÁV-START Zrt. Menetjegy'), 'TRAIN');
+  assert.equal(findTransport('FlixBus ticket'), 'BUS');
+  assert.equal(findTransport('ОБЩО 23,40 лв\nАвтобус'), 'BUS');
+  assert.equal(findTransport('BlaBlaCar booking'), 'CARPOOLING');
+  assert.equal(findTransport('SC PETROM SA'), null);
+});
+
+test('findRoute reads where the journey starts and ends', () => {
+  const route = (text) => {
+    const r = findRoute(text);
+    return r.fromCity && `${r.fromCity}, ${r.fromCountry} -> ${r.toCity}, ${r.toCountry}`;
+  };
+  assert.equal(route('W6 4321\nSOF - BUD\n06:40'), 'Sofia, Bulgaria -> Budapest, Hungary');
+  assert.equal(route('MÁV-START Zrt. Budapest\nSzeged - Budapest-Nyugati'), 'Szeged, Hungary -> Budapest, Hungary');
+  assert.equal(route('Plecare: București Nord\nSosire: Brașov'), 'Bucharest, Romania -> Brașov, Romania');
+  assert.equal(route('Bilet Warszawa Centralna → Kraków Główny'), 'Warsaw, Poland -> Kraków, Poland');
+  assert.equal(route('Автобус София - Пловдив'), 'Sofia, Bulgaria -> Plovdiv, Bulgaria');
+  assert.equal(route('İstanbul Otogar - Edirne'), 'Istanbul, Turkey -> Edirne, Turkey');
+  assert.equal(route('Palma de Mallorca to Madrid'), 'Palma, Spain -> Madrid, Spain');
+  assert.equal(route('TAXI Sofia'), null);
 });
 
 const samples = [
@@ -33,7 +60,7 @@ Subtotal 42.50
 VAT 20% 7.08
 TOTAL £42.50
 Card 42.50`,
-    expected: { amount: 42.5, currency: 'GBP', date: '2025-03-14', vendor: 'CITY CAB LTD' },
+    expected: { amount: 42.5, currency: 'GBP', date: '2025-03-14' },
   },
   {
     name: 'Hungarian',
@@ -45,7 +72,7 @@ Helyjegy 1 db       2 350 Ft
 ÖSSZESEN:          12 340 Ft
 KÉSZPÉNZ           15 000 Ft
 VISSZAJÁRÓ          2 660 Ft`,
-    expected: { amount: 12340, currency: 'HUF', date: '2025-04-02', vendor: 'MÁV-START Zrt.' },
+    expected: { amount: 12340, currency: 'HUF', date: '2025-04-02' },
   },
   {
     name: 'Romanian',
@@ -57,7 +84,7 @@ TOTAL           231,45 LEI
 NUMERAR         250,00
 REST             18,55
 DATA: 21.05.2025`,
-    expected: { amount: 231.45, currency: 'RON', date: '2025-05-21', vendor: 'SC PETROM SA' },
+    expected: { amount: 231.45, currency: 'RON', date: '2025-05-21' },
   },
   {
     name: 'Turkish',
@@ -67,7 +94,7 @@ TARİH: 10.06.2025
 BİLET           *250,00
 TOPKDV           *41,67
 TOPLAM          *250,00 TL`,
-    expected: { amount: 250, currency: 'TRY', date: '2025-06-10', vendor: 'HAVAIST OTOBÜS' },
+    expected: { amount: 250, currency: 'TRY', date: '2025-06-10' },
   },
   {
     name: 'Spanish',
@@ -77,7 +104,7 @@ Fecha: 05/07/2025
 Base imponible 37,19
 IVA 10% 3,72
 TOTAL A PAGAR 40,91 €`,
-    expected: { amount: 40.91, currency: 'EUR', date: '2025-07-05', vendor: 'RENFE VIAJEROS' },
+    expected: { amount: 40.91, currency: 'EUR', date: '2025-07-05' },
   },
   {
     name: 'Polish',
@@ -89,7 +116,7 @@ PTU A 23% 16,83
 SUMA PLN 89,99
 Gotówka 100,00
 Reszta 10,01`,
-    expected: { amount: 89.99, currency: 'PLN', date: '2025-08-11', vendor: 'PKP Intercity S.A.' },
+    expected: { amount: 89.99, currency: 'PLN', date: '2025-08-11' },
   },
   {
     name: 'Bulgarian',
@@ -101,7 +128,7 @@ Reszta 10,01`,
 ОБЩО             23,40 лв
 В БРОЙ           30,00
 РЕСТО             6,60`,
-    expected: { amount: 23.4, currency: 'BGN', date: '2025-09-18', vendor: 'ТАКСИ ОК СУПЕРТРАНС' },
+    expected: { amount: 23.4, currency: 'BGN', date: '2025-09-18' },
   },
   {
     name: 'Total label on its own line',
@@ -111,7 +138,7 @@ Issued 01.10.2025
 Room 3 nights
 Total amount
 EUR 1.234,50`,
-    expected: { amount: 1234.5, currency: 'EUR', date: '2025-10-01', vendor: 'Hotel Bellevue' },
+    expected: { amount: 1234.5, currency: 'EUR', date: '2025-10-01' },
   },
 ];
 

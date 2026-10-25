@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Receipts Admin</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script type="module" src="/admin/admin.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Receipts admin</h1>
+    <div class="phone-link">
+      <span class="muted">Phones open</span>
+      <strong id="phone-url">…</strong>
+      <button id="show-qr" class="button" type="button">Show QR code</button>
+    </div>
+  </header>
+
+  <main id="view" class="page wide-page"></main>
+
+  <dialog id="qr-dialog">
+    <h2>Scan to open the form</h2>
+    <p class="hint">Phones must first join this tablet's Wi-Fi hotspot.</p>
+    <div id="qr-list"></div>
+    <form method="dialog"><button class="button wide">Close</button></form>
+  </dialog>
+</body>
+</html>

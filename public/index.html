@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Travel Expenses</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Travel expenses</h1>
+  </header>
+
+  <main id="form-view" class="page">
+    <p class="intro">Fill in your details and add a photo or PDF of every travel receipt and invoice. Check the amounts, then send everything in one go.</p>
+
+    <form id="claim" novalidate>
+      <section class="card">
+        <h2><span class="step">1</span> Your details</h2>
+        <div class="grid two">
+          <label>First name
+            <input name="firstName" autocomplete="given-name" required maxlength="100">
+          </label>
+          <label>Last name
+            <input name="lastName" autocomplete="family-name" required maxlength="100">
+          </label>
+          <label>Date of birth
+            <input name="dob" type="date" autocomplete="bday" required min="1900-01-01">
+          </label>
+          <label>Email address
+            <input name="email" type="email" autocomplete="email" inputmode="email" required maxlength="200">
+          </label>
+          <label>Country
+            <select name="country" required>
+              <option value="">Choose…</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">2</span> Receipts and invoices</h2>
+        <p class="hint">One photo or PDF per receipt. Lay the receipt flat in good light and fill the frame.</p>
+        <div class="actions">
+          <label class="button primary">
+            Take photo
+            <input id="camera-input" type="file" accept="image/*" capture="environment" hidden>
+          </label>
+          <label class="button">
+            Add photos or PDFs
+            <input id="file-input" type="file" accept="image/*,application/pdf,.pdf,.heic,.heif" multiple hidden>
+          </label>
+        </div>
+        <label class="inline">Receipts are mostly in
+          <select id="default-lang"></select>
+        </label>
+        <ol id="receipts" class="receipts"></ol>
+        <p id="no-receipts" class="empty">No receipts added yet.</p>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">3</span> Send</h2>
+        <p id="summary" class="hint">Add your receipts above.</p>
+        <p class="hint">You can only send once. After that, only the organiser can make changes.</p>
+        <div id="form-error" class="error" role="alert" hidden></div>
+        <button id="send" class="button primary wide" type="submit">Send</button>
+        <div id="upload" class="upload" hidden>
+          <progress id="upload-bar" max="1" value="0"></progress>
+          <span id="upload-text">Sending…</span>
+        </div>
+      </section>
+    </form>
+  </main>
+
+  <main id="done-view" class="page" hidden>
+    <section class="card done">
+      <h2>Thank you!</h2>
+      <p id="done-text"></p>
+      <p class="hint">You can close this page. The organiser will print your document for you to sign.</p>
+      <button id="again" class="button" type="button">Fill in a form for someone else</button>
+    </section>
+  </main>
+</body>
+</html>

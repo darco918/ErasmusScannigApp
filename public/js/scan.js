@@ -22,8 +22,9 @@ function loadTesseract() {
 let worker = null;
 let workerLangs = '';
 let reportProgress = () => {};
-async function getWorker(lang) {
-  const langs = lang === 'eng' ? ['eng'] : [lang, 'eng'];
+// `langs` lists the languages to read with, most likely first; English is always added.
+async function getWorker(langs) {
+  langs = [...new Set([...langs, 'eng'])];
   const key = langs.join('+');
   const Tesseract = await loadTesseract();
   if (!worker) {
@@ -43,8 +44,8 @@ async function getWorker(lang) {
   return worker;
 }
 
-async function ocr(canvas, lang, onProgress) {
-  const w = await getWorker(lang);
+async function ocr(canvas, langs, onProgress) {
+  const w = await getWorker(langs);
   reportProgress = onProgress;
   try {
     const { data } = await w.recognize(canvas);
@@ -118,7 +119,7 @@ async function renderPage(page, maxSide) {
   return canvas;
 }
 
-async function readPdf(file, lang, onProgress) {
+async function readPdf(file, langs, onProgress) {
   const pdfjs = await loadPdfjs();
   const task = pdfjs.getDocument({
     data: new Uint8Array(await file.arrayBuffer()),
@@ -145,7 +146,7 @@ async function readPdf(file, lang, onProgress) {
       const parts = [];
       for (let i = 1; i <= ocrPages; i++) {
         const canvas = await renderPage(await doc.getPage(i), MAX_SIDE);
-        parts.push(await ocr(canvas, lang, (p) => onProgress((i - 1 + p) / ocrPages)));
+        parts.push(await ocr(canvas, langs, (p) => onProgress((i - 1 + p) / ocrPages)));
       }
       text = parts.join('\n');
     }
@@ -161,8 +162,8 @@ export function isPdf(file) {
 
 // Returns { text, thumbnail? }. Throws if the file cannot be read at all
 // (e.g. an image format this browser cannot decode): the user then types the values.
-export async function readReceipt(file, lang, onProgress = () => {}) {
-  if (isPdf(file)) return readPdf(file, lang, onProgress);
+export async function readReceipt(file, langs, onProgress = () => {}) {
+  if (isPdf(file)) return readPdf(file, langs, onProgress);
   const canvas = await imageToCanvas(file);
-  return { text: await ocr(canvas, lang, onProgress), source: 'photo' };
+  return { text: await ocr(canvas, langs, onProgress), source: 'photo' };
 }

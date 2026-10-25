@@ -57,7 +57,8 @@ export function validateProject(input, { partial = false } = {}) {
 }
 
 // Participant details. With `partial`, only the fields present are checked (admin edits).
-export function validateDetails(input, { partial = false, allowCap = false } = {}) {
+// `admin` also allows the fields only the tablet sets: the cap and the "checked" mark.
+export function validateDetails(input, { partial = false, admin = false } = {}) {
   const out = {};
   const errors = {};
   const has = (k) => !partial || input[k] !== undefined;
@@ -80,7 +81,8 @@ export function validateDetails(input, { partial = false, allowCap = false } = {
     out.country = text(input.country, 50);
     if (!COUNTRIES.includes(out.country)) errors.country = 'Please choose a country.';
   }
-  if (allowCap && input.capEur !== undefined) {
+  if (admin && input.reviewed !== undefined) out.reviewed = input.reviewed === true;
+  if (admin && input.capEur !== undefined) {
     const cap = input.capEur === '' || input.capEur === null ? null : number(input.capEur);
     if (cap !== null && (typeof cap !== 'number' || !Number.isFinite(cap) || cap < 0)) errors.capEur = 'The cap must be an amount in EUR.';
     else out.capEur = cap === null ? null : Math.round(cap * 100) / 100;

@@ -73,7 +73,12 @@ function overview(store, port) {
     activeProjectId,
     phoneUrls,
     settings,
-    projects: projects.map((p) => ({ ...projectInfo(p), userCount: p.users.length, totalEur: groupSummary(p.users, p.rates).totalEur })),
+    projects: projects.map((p) => ({
+      ...projectInfo(p),
+      userCount: p.users.length,
+      reviewedCount: p.users.filter((u) => u.reviewed).length,
+      totalEur: groupSummary(p.users, p.rates).totalEur,
+    })),
   };
 }
 
@@ -92,6 +97,7 @@ function projectState(project) {
       dob: user.dob,
       email: user.email,
       country: user.country,
+      reviewed: user.reviewed === true,
       acceptedCount: s.acceptedCount,
       rejectedCount: s.rejectedCount,
       sumEur: s.sumEur,
@@ -234,7 +240,7 @@ export function createApp(store) {
 
   admin.patch('/projects/:pid/users/:id', async (req, res) => {
     getUser(req.params.pid, req.params.id);
-    const changes = validateDetails(req.body, { partial: true, allowCap: true });
+    const changes = validateDetails(req.body, { partial: true, admin: true });
     await store.update(() => Object.assign(getUser(req.params.pid, req.params.id), changes));
     ok(res);
   });

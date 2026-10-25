@@ -9,13 +9,13 @@
   <link rel="stylesheet" href="/admin/admin.css">
   <script type="module" src="/admin/admin.js"></script>
 </head>
-<body>
-  <header class="topbar">
-    <h1>Receipts admin</h1>
-    <div class="phone-link">
-      <span class="muted">Phones open</span>
-      <strong id="phone-url">…</strong>
-      <button id="show-qr" class="button" type="button">Show QR code</button>
+<body class="admin">
+  <header class="topbar admin-bar">
+    <strong class="brand">Travel receipts</strong>
+    <div class="bar-controls">
+      <select id="project-switch" aria-label="Open a project" hidden></select>
+      <button id="new-project" class="button" type="button" hidden>+ New project</button>
+      <button id="show-qr" class="button primary" type="button">Show QR code</button>
     </div>
   </header>
 
@@ -23,9 +23,23 @@
 
   <dialog id="qr-dialog">
     <h2>Scan to open the form</h2>
-    <p class="hint">Phones must first join this tablet's Wi-Fi hotspot.</p>
+    <p class="hint">Phones must first join the same Wi-Fi as this tablet.</p>
     <div id="qr-list"></div>
     <form method="dialog"><button class="button wide">Close</button></form>
   </dialog>
+
+  <dialog id="viewer" class="viewer">
+    <div class="viewer-bar">
+      <strong id="viewer-title"></strong>
+      <div class="actions">
+        <button id="viewer-rotate" class="button" type="button">Rotate</button>
+        <a id="viewer-open" class="button" target="_blank">Open original</a>
+        <form method="dialog"><button class="button primary">Close</button></form>
+      </div>
+    </div>
+    <div class="viewer-body"><img id="viewer-img" alt=""></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
 </body>
 </html>

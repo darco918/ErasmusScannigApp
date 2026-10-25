@@ -2,19 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>Travel Expenses</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/phone.css">
   <script type="module" src="/app.js"></script>
 </head>
-<body>
+<body class="phone">
   <header class="topbar">
     <div>
       <h1 id="project-title">Travel expenses</h1>
       <p id="project-dates" class="muted"></p>
     </div>
   </header>
+
+  <!-- File pickers, shared by every "add" button on the page. -->
+  <input id="camera-input" type="file" accept="image/*" capture="environment" hidden>
+  <input id="file-input" type="file" accept="image/*,application/pdf,.pdf,.heic,.heif" multiple hidden>
 
   <main id="closed-view" class="page" hidden>
     <section class="card">
@@ -23,12 +28,23 @@
     </section>
   </main>
 
-  <main id="form-view" class="page">
-    <p class="intro">Fill in your details and add a photo or PDF of every travel ticket, receipt and invoice. Each one is a journey: check the amount, date, transport and where you travelled from and to, then send everything in one go.</p>
+  <div id="form-view" hidden>
+    <ol class="stepper" aria-label="Progress">
+      <li data-step="1"><span>1</span> Details</li>
+      <li data-step="2"><span>2</span> Receipts</li>
+      <li data-step="3"><span>3</span> Send</li>
+    </ol>
 
-    <form id="claim" novalidate>
-      <section class="card">
-        <h2><span class="step">1</span> Your details</h2>
+    <div id="restored" class="notice" hidden>
+      <span>We restored the form you had not sent yet.</span>
+      <button id="start-over" class="link" type="button">Start over</button>
+    </div>
+
+    <!-- Step 1 -->
+    <main class="page step" data-step="1">
+      <form id="details" class="card" novalidate>
+        <h2>Your details</h2>
+        <p class="hint">As they should appear on your reimbursement form.</p>
         <div class="grid two">
           <label>First name
             <input name="firstName" autocomplete="given-name" required maxlength="100">
@@ -42,53 +58,75 @@
           <label>Email address
             <input name="email" type="email" autocomplete="email" inputmode="email" required maxlength="200">
           </label>
-          <label>Country
+          <label>Country you live in
             <select name="country" required>
               <option value="">Choose…</option>
             </select>
           </label>
         </div>
-      </section>
+      </form>
+    </main>
 
+    <!-- Step 2 -->
+    <main class="page step" data-step="2" hidden>
       <section class="card">
-        <h2><span class="step">2</span> Receipts and invoices</h2>
-        <p class="hint">One photo or PDF per receipt. Lay the receipt flat in good light and fill the frame.</p>
-        <div class="actions">
-          <label class="button primary">
-            Take photo
-            <input id="camera-input" type="file" accept="image/*" capture="environment" hidden>
-          </label>
-          <label class="button">
-            Add photos or PDFs
-            <input id="file-input" type="file" accept="image/*,application/pdf,.pdf,.heic,.heif" multiple hidden>
-          </label>
+        <h2>Your tickets and receipts</h2>
+        <p class="hint">Add one photo or PDF for every journey: plane, bus, train or carpooling. We read each one and fill in the details for you to check.</p>
+        <div class="add-buttons">
+          <label for="camera-input" class="button primary big"><span class="icon" aria-hidden="true">📷</span> Take a photo</label>
+          <label for="file-input" class="button big"><span class="icon" aria-hidden="true">📄</span> Choose files</label>
         </div>
-        <label class="inline">Receipts are mostly in
-          <select id="default-lang"></select>
-        </label>
-        <ol id="receipts" class="receipts"></ol>
-        <p id="no-receipts" class="empty">No receipts added yet.</p>
+        <p class="hint small">Tip: “Choose files” lets you pick several photos or PDFs at once.</p>
       </section>
 
+      <div id="receipt-summary" class="summary-bar" hidden></div>
+      <ol id="receipts" class="receipt-list"></ol>
+      <div id="add-more" class="add-more" hidden>
+        <label for="camera-input" class="button"><span class="icon" aria-hidden="true">📷</span> Add photo</label>
+        <label for="file-input" class="button"><span class="icon" aria-hidden="true">📄</span> Add files</label>
+      </div>
+    </main>
+
+    <!-- Step 3 -->
+    <main class="page step" data-step="3" hidden>
       <section class="card">
-        <h2><span class="step">3</span> Send</h2>
-        <p id="summary" class="hint">Add your receipts above.</p>
-        <p class="hint">You can only send once. After that, only the organiser can make changes.</p>
+        <div class="card-title">
+          <h2>Your details</h2>
+          <button class="link" type="button" data-goto="1">Change</button>
+        </div>
+        <dl id="review-details" class="review-details"></dl>
+      </section>
+      <section class="card">
+        <div class="card-title">
+          <h2 id="review-title">Journeys</h2>
+          <button class="link" type="button" data-goto="2">Change</button>
+        </div>
+        <ol id="review-receipts" class="review-receipts"></ol>
+        <p id="review-totals" class="totals"></p>
+        <p class="hint small">The organiser converts everything to EUR.</p>
+      </section>
+      <section class="card send-card">
+        <p class="hint">You can send only once. After that, only the organiser can make changes.</p>
         <div id="form-error" class="error" role="alert" hidden></div>
-        <button id="send" class="button primary wide" type="submit">Send</button>
         <div id="upload" class="upload" hidden>
           <progress id="upload-bar" max="1" value="0"></progress>
           <span id="upload-text">Sending…</span>
         </div>
       </section>
-    </form>
-  </main>
+    </main>
+
+    <div class="action-bar">
+      <button id="back" class="button" type="button">Back</button>
+      <button id="next" class="button primary" type="button">Next</button>
+    </div>
+  </div>
 
   <main id="done-view" class="page" hidden>
     <section class="card done">
+      <div class="done-mark" aria-hidden="true">✓</div>
       <h2>Thank you!</h2>
       <p id="done-text"></p>
-      <p class="hint">You can close this page. The organiser will print your document for you to sign.</p>
+      <p class="hint">You can close this page. The organiser will print your form for you to sign.</p>
       <button id="again" class="button" type="button">Fill in a form for someone else</button>
     </section>
   </main>

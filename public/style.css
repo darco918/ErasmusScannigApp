@@ -34,6 +34,9 @@
 
 * { box-sizing: border-box; }
 
+/* Layout rules below set display; `hidden` must still win. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -65,14 +68,9 @@ body {
   margin-bottom: 16px;
 }
 .card h2 { font-size: 1.1rem; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
-.step {
-  display: inline-grid; place-items: center;
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--accent); color: var(--accent-text);
-  font-size: .9rem;
-}
 .hint, .muted, .empty { color: var(--muted); font-size: .92rem; }
 .hint { margin: 0 0 12px; }
+.hint.small { font-size: .85rem; }
 
 .grid { display: grid; gap: 12px; }
 @media (min-width: 560px) { .grid.two, .grid.fields { grid-template-columns: 1fr 1fr; } }
@@ -117,31 +115,6 @@ button.link {
   border: none; background: none; color: var(--accent);
   padding: 8px 0; min-height: 36px; cursor: pointer; font-weight: 600;
 }
-
-.receipts { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-direction: column; gap: 12px; }
-.receipt {
-  border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 12px; background: var(--card);
-}
-.receipt.invalid { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
-.receipt[data-state="failed"] .status { color: var(--warn); }
-.receipt-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
-.receipt-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.receipt-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.receipt-title progress { width: 100%; height: 6px; }
-.status { font-size: .9rem; }
-fieldset.place { border: none; padding: 0; margin: 12px 0 0; min-width: 0; }
-fieldset.place legend { font-weight: 700; padding: 0; margin-bottom: 6px; }
-.receipt-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-
-.thumb {
-  width: 64px; height: 64px; flex: none;
-  border-radius: 6px; border: 1px solid var(--line);
-  background: var(--bg); overflow: hidden;
-  display: grid; place-items: center;
-  font-size: .8rem; font-weight: 700; color: var(--muted);
-}
-.thumb img { width: 100%; height: 100%; object-fit: contain; grid-area: 1 / 1; background: #fff; }
 
 .error {
   background: var(--danger-bg); color: var(--danger);

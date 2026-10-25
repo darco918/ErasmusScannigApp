@@ -70,6 +70,7 @@ export function publicConfig(project) {
       endDate: project.endDate,
       hostCountry: project.hostCountry,
       routeCountries: routeCountries(project.hostCountry),
+      hostLang: COUNTRY_DEFAULTS[project.hostCountry]?.lang || null,
     },
   };
 }

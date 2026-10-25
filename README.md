@@ -21,12 +21,23 @@ once, to install it.
   to the *active* project. **New project** starts an empty one; earlier
   projects are never deleted and can be opened, edited, exported or made
   active again from the project list.
-- **Phones** open `http://<tablet address>:8080/` in their browser. Each
-  receipt is one journey (one row of the form). It is read on the phone itself
-  (Tesseract OCR for photos and scanned PDFs, pdf.js for PDFs with real text):
+- **Phones** open `http://<tablet address>:8080/` in their browser and go
+  through three steps: *Details*, *Receipts*, *Send*. Receipts can be added
+  one photo at a time or several files at once, and show as a list marked
+  *Ready* or *Needs details*; tapping one opens it for checking. Each receipt
+  is one journey (one row of the form). It is read on the phone itself
+  (Tesseract OCR for photos and scanned PDFs, pdf.js for PDFs with real text)
+  in the participant's language, the host country's language and English:
   amount, currency, date, means of transport (PLANE, CARPOOLING, BUS, TRAIN)
   and From/To city and country are suggested for the participant to check.
-  From, To, transport and date are required. Participants can send only once.
+  From, To, transport and date are required. The unsent form is kept on the
+  phone, so a reload (common after taking a photo) loses nothing.
+  Participants can send only once.
+- **Admin view** has tabs: *Overview* (a checklist of what to do next),
+  *Participants* (filter by to check / checked / problems), *Exchange rates*,
+  *Print & export* and *Project*. On a participant's page every change is
+  saved automatically, photos enlarge with a tap, and **Mark as checked &
+  next** moves through everyone in turn.
 - **Admin view** opens only in a browser on the tablet itself, at
   `http://localhost:8080/admin`. Phones get "403 forbidden" there.
 

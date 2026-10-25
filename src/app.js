@@ -3,11 +3,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import QRCode from 'qrcode';
 import { streamArchive, safeName } from './archive.js';
-import { CURRENCIES, publicConfig, routeCountries } from './config.js';
+import { ADMIN_PIN, CURRENCIES, publicConfig, routeCountries } from './config.js';
 import { renderDocuments } from './documents.js';
 import { renderWorkbook } from './excel.js';
 import { groupSummary } from './money.js';
 import { isLoopback, lanAddresses } from './network.js';
+import { createPinLock } from './pin.js';
 import { newProject } from './store.js';
 import { submissionHandler } from './submit.js';
 import { validateDetails, validateProject, validateRates, validateReceipt, ValidationError } from './validate.js';
@@ -127,8 +128,9 @@ function projectState(project) {
   };
 }
 
-export function createApp(store) {
+export function createApp(store, { pin = ADMIN_PIN } = {}) {
   const app = express();
+  const pinLock = createPinLock(pin);
   app.disable('x-powered-by');
   app.set('etag', false);
 
@@ -169,6 +171,12 @@ export function createApp(store) {
   app.use('/admin', adminOnly, express.static(path.join(ROOT, 'admin')));
   const admin = express.Router();
   admin.use(adminOnly, express.json({ limit: '100kb' }));
+
+  // The PIN screen talks to these three; everything after them needs the PIN.
+  admin.get('/session', (req, res) => res.json({ unlocked: pinLock.unlocked(req) }));
+  admin.post('/unlock', pinLock.unlock);
+  admin.post('/lock', pinLock.lock);
+  admin.use(pinLock.require);
   const port = (req) => req.socket.localPort;
   const ok = (res) => res.json({ ok: true });
 

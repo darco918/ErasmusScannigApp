@@ -39,7 +39,10 @@ once, to install it.
   saved automatically, photos enlarge with a tap, and **Mark as checked &
   next** moves through everyone in turn.
 - **Admin view** opens only in a browser on the tablet itself, at
-  `http://localhost:8080/admin`. Phones get "403 forbidden" there.
+  `http://localhost:8080/admin`, and asks for a PIN (`080900`). Phones get
+  "403 forbidden" there. After 5 wrong PINs it waits a minute. **Lock** in the
+  top bar closes it again; restarting the app also asks for the PIN again.
+  To use another PIN, start with `ADMIN_PIN=123456 npm start`.
 
 Receipt languages: English, Hungarian, Romanian, Turkish, Spanish, Polish and
 Bulgarian. Each receipt is read with English plus the chosen language

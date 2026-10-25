@@ -18,6 +18,7 @@ const PNG = Buffer.from(
 
 let server;
 let base;
+let cookie = '';
 let dataDir;
 let pdfBytes;
 
@@ -47,8 +48,18 @@ after(async () => {
 const admin = (url, init = {}) =>
   fetch(`${base}/api/admin${url}`, {
     ...init,
-    headers: { 'X-Admin': '1', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
+    headers: { 'X-Admin': '1', Cookie: cookie, ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
   });
+
+async function unlock(pin = '080900') {
+  const res = await fetch(`${base}/api/admin/unlock`, {
+    method: 'POST',
+    headers: { 'X-Admin': '1', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin }),
+  });
+  if (res.ok) cookie = res.headers.get('set-cookie').split(';')[0];
+  return res;
+}
 const json = async (res) => {
   const body = await res.json();
   assert.ok(res.ok, `${res.status}: ${JSON.stringify(body)}`);
@@ -97,6 +108,39 @@ const PROJECT = {
 
 let projectId;
 let userId;
+
+test('the admin view needs the PIN', async () => {
+  assert.equal((await admin('/overview')).status, 401);
+  assert.deepEqual(await (await admin('/session')).json(), { unlocked: false });
+  const wrong = await unlock('123456');
+  assert.equal(wrong.status, 401);
+  assert.match((await wrong.json()).error, /Wrong PIN. 4 attempts left/);
+  assert.equal((await unlock()).status, 200);
+  assert.deepEqual(await (await admin('/session')).json(), { unlocked: true });
+  assert.equal((await admin('/overview')).status, 200);
+
+  // Locking ends the session.
+  await admin('/lock', { method: 'POST' });
+  assert.equal((await admin('/overview')).status, 401);
+  await unlock();
+});
+
+test('too many wrong PINs lock the screen for a while', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'receipts-pin-'));
+  const s = http.createServer(createApp(await openStore(dir), { pin: '4321' }));
+  await new Promise((resolve) => s.listen(0, '127.0.0.1', resolve));
+  const tryPin = (pin) => fetch(`http://127.0.0.1:${s.address().port}/api/admin/unlock`, {
+    method: 'POST', headers: { 'X-Admin': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ pin }),
+  });
+  try {
+    for (let i = 0; i < 4; i++) assert.equal((await tryPin('0000')).status, 401);
+    assert.equal((await tryPin('0000')).status, 429);
+    assert.equal((await tryPin('4321')).status, 429, 'even the right PIN waits until the lock ends');
+  } finally {
+    s.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
 
 test('before a project exists, phones are told to wait', async () => {
   const config = await json(await fetch(`${base}/api/config`));
@@ -270,6 +314,8 @@ test('a new project starts empty; the old one is kept and can be reactivated', a
   server.close();
   server = await startServer(dataDir);
   base = `http://127.0.0.1:${server.address().port}`;
+  assert.equal((await admin('/overview')).status, 401, 'a restart asks for the PIN again');
+  await unlock();
   const old = await json(await admin(`/projects/${projectId}`));
   assert.equal(old.users.length, 2);
 

@@ -109,7 +109,8 @@ try {
   const tablet = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const adminPage = await tablet.newPage();
   const adminProblems = [];
-  adminPage.on('console', (m) => m.type() === 'error' && adminProblems.push(m.text()));
+  // The deliberately wrong PIN below makes the browser log a 401; that one is expected.
+  adminPage.on('console', (m) => m.type() === 'error' && !m.text().includes('status of 401') && adminProblems.push(m.text()));
   adminPage.on('pageerror', (e) => adminProblems.push(e.message));
   adminPage.on('dialog', (d) => d.accept());
   const fillProject = async (title, host, start, end) => {
@@ -121,7 +122,15 @@ try {
     await adminPage.click('text=Create project');
   };
   await adminPage.goto(`http://localhost:${port}/admin/`);
+  await adminPage.waitForSelector('.pin-card');
+  await shot(adminPage, 'admin-pin');
+  await adminPage.fill('.pin-input', '111111');
+  await adminPage.click('text=Unlock');
+  await adminPage.waitForSelector('.pin-card .error:has-text("Wrong PIN")');
+  await adminPage.fill('.pin-input', '080900');
+  await adminPage.click('text=Unlock');
   await adminPage.waitForSelector('text=Welcome! Set up your project');
+  check(true, 'admin view asks for the PIN, refuses a wrong one, opens with 080900');
   await shot(adminPage, 'admin-setup');
   await fillProject('Taste of the Balkans', 'Bulgaria', '2026-08-10', '2026-08-18');
   await adminPage.waitForSelector('text=Active – phones send here');
@@ -271,6 +280,10 @@ try {
   await adminPage.click('.project-head >> text=Make active');
   await adminPage.waitForSelector('text=Active – phones send here');
   check(true, 'first project re-activated');
+  await adminPage.click('#lock');
+  await adminPage.waitForSelector('.pin-card');
+  const lockedApi = await tablet.request.get(`http://localhost:${port}/api/admin/overview`);
+  check(lockedApi.status() === 401, 'Lock button closes the admin view again');
   if (adminProblems.length) check(false, 'admin console errors:\n  ' + adminProblems.join('\n  '));
 } finally {
   await browser.close();

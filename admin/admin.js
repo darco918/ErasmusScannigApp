@@ -17,6 +17,7 @@ let data = null; // the project being viewed
 let search = '';
 let filter = 'all';
 let formDirty = false; // unsaved project form: pause auto-refresh
+let locked = true; // until the PIN is entered
 
 // ---------- helpers ----------
 
@@ -27,9 +28,68 @@ async function api(method, url, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));
+  if (res.status === 401 && json.locked) showLock();
   if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
   return json;
 }
+
+// ---------- PIN lock ----------
+
+function showLock(message = '') {
+  locked = true;
+  for (const el of document.querySelectorAll('.bar-controls > *')) el.hidden = true;
+  document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+  const pin = h('input', {
+    type: 'password', inputmode: 'numeric', autocomplete: 'off', maxlength: 12, required: true,
+    class: 'pin-input', 'aria-label': 'PIN', 'data-key': 'pin',
+  });
+  const error = h('p', { class: 'error', role: 'alert', hidden: !message }, message);
+  const form = h('form', {
+    class: 'card pin-card',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      const button = e.submitter;
+      button.disabled = true;
+      try {
+        const res = await fetch('/api/admin/unlock', {
+          method: 'POST',
+          headers: { 'X-Admin': '1', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: pin.value }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error || 'Could not unlock.');
+        unlockDone();
+      } catch (err) {
+        error.textContent = err.message;
+        error.hidden = false;
+        pin.value = '';
+        pin.focus();
+      } finally {
+        button.disabled = false;
+      }
+    },
+  },
+    h('div', { class: 'pin-icon', 'aria-hidden': 'true' }, '🔒'),
+    h('h2', {}, 'Admin view'),
+    h('p', { class: 'hint' }, 'Enter the PIN to continue.'),
+    pin,
+    error,
+    h('button', { class: 'button primary wide', type: 'submit' }, 'Unlock'),
+  );
+  view.replaceChildren(form);
+  pin.focus();
+}
+
+function unlockDone() {
+  locked = false;
+  for (const el of document.querySelectorAll('.bar-controls > *')) el.hidden = false;
+  load().catch((err) => toast(err.message, 'error'));
+}
+
+$('#lock').addEventListener('click', async () => {
+  await fetch('/api/admin/lock', { method: 'POST', headers: { 'X-Admin': '1' } }).catch(() => {});
+  showLock();
+});
 
 let toastTimer;
 function toast(message, kind = 'ok') {
@@ -120,6 +180,7 @@ function render() {
 }
 
 function renderBar() {
+  if (locked) return;
   const select = $('#project-switch');
   const hasProjects = overview.projects.length > 0;
   select.hidden = !hasProjects;
@@ -631,20 +692,22 @@ $('#show-qr').addEventListener('click', showQr);
 
 window.addEventListener('hashchange', () => {
   window.scrollTo(0, 0);
-  load().catch((err) => toast(err.message, 'error'));
+  if (!locked) load().catch((err) => toast(err.message, 'error'));
 });
 
 // New submissions appear on their own, unless the admin is in the middle of something.
 setInterval(() => {
   const busy = formDirty || document.activeElement?.matches('input, select') || $('#qr-dialog').open || $('#viewer').open;
-  if (config && !document.hidden && !busy) load().catch(() => {});
+  if (config && !locked && !document.hidden && !busy) load().catch(() => {});
 }, REFRESH_MS);
 
 fetch('/api/config')
   .then((res) => res.json())
-  .then((json) => {
+  .then(async (json) => {
     config = json;
-    return load();
+    const session = await (await fetch('/api/admin/session')).json();
+    if (session.unlocked) unlockDone();
+    else showLock();
   })
   .catch((err) => {
     view.replaceChildren(h('p', { class: 'error' }, `Could not load data: ${err.message}`));

@@ -2,6 +2,9 @@
 
 export const BASE_CURRENCY = 'EUR';
 
+// PIN for the admin view. Can be changed when starting: ADMIN_PIN=123456 npm start
+export const ADMIN_PIN = process.env.ADMIN_PIN || '080900';
+
 // Countries participants come from.
 export const COUNTRIES = ['Bulgaria', 'Hungary', 'Poland', 'Romania', 'Spain', 'Turkey', 'Other'];
 

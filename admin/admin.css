@@ -212,3 +212,11 @@ dialog.viewer[open] { display: flex; }
 }
 .toast.show { opacity: 1; transform: none; }
 .toast.error { background: var(--danger); color: #fff; }
+
+/* PIN screen */
+.pin-card { max-width: 360px; margin: 10vh auto 0; text-align: center; display: flex; flex-direction: column; gap: 12px; padding: 28px 24px; }
+.pin-card h2 { justify-content: center; margin: 0; font-size: 1.4rem; }
+.pin-card .hint { margin: 0; }
+.pin-icon { font-size: 2.2rem; }
+.pin-input { text-align: center; font-size: 1.8rem; letter-spacing: .4em; min-height: 60px; }
+.pin-card .error { margin: 0; }

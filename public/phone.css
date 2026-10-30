@@ -39,7 +39,7 @@ body.phone { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
   display: flex; gap: 10px; justify-content: center;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   background: var(--card); border-top: 1px solid var(--line);
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, .06);
+  box-shadow: 0 -4px 16px var(--shadow);
 }
 .action-bar .button { flex: 1; max-width: 340px; min-height: 50px; font-size: 1rem; }
 .action-bar #back { flex: 0 0 96px; }
@@ -85,8 +85,8 @@ body.phone { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
 .row-num { font-weight: 700; color: var(--muted); width: 1.4em; text-align: center; flex: none; }
 .thumb {
   width: 48px; height: 48px; flex: none;
-  border-radius: 6px; border: 1px solid var(--line); background: #fff; overflow: hidden;
-  display: grid; place-items: center; font-size: .72rem; font-weight: 700; color: #667;
+  border-radius: 6px; border: 1px solid var(--line); background: var(--raised); overflow: hidden;
+  display: grid; place-items: center; font-size: .72rem; font-weight: 700; color: var(--muted);
 }
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
 .row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -145,3 +145,19 @@ button.link.danger { color: var(--danger); }
 .toast.show { opacity: 1; transform: none; }
 
 #done-view ~ .action-bar, #closed-view:not([hidden]) ~ .action-bar { display: none; }
+
+/* Journeys without a receipt */
+.chip.later { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.receipt[data-state="later"] { border-left: 4px solid var(--accent); }
+.no-receipt { font-size: 1.3rem; color: var(--accent); }
+.later-box {
+  background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 8px;
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; text-align: left;
+}
+.later-box p { margin: 0; font-size: .92rem; }
+.later-box ul { margin: 0; padding-left: 20px; }
+.done .later-box { margin: 12px 0; }
+.later-note { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; font-size: .9rem; background: var(--warn-bg); color: var(--warn); }
+.add-more .span-2 { grid-column: 1 / -1; }
+.add-manual.link { display: block; margin: 4px auto 0; text-align: center; }
+.review-receipts .chip { align-self: flex-start; margin-top: 4px; }

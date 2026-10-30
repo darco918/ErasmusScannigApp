@@ -189,17 +189,33 @@ try {
     const wrong = Object.keys(want).filter((k) => card[k] !== want[k]);
     check(!wrong.length, `${RECEIPTS[i].file.padEnd(15)} ${card.amount} ${card.currency} ${card.date} ${card.transport} ${card.fromCity}, ${card.fromCountry} -> ${card.toCity}, ${card.toCountry}${wrong.length ? `  (wrong: ${wrong.join(', ')})` : ''}`);
   });
-  await page.click('.receipt:nth-child(1) .receipt-row');
+  // A journey whose receipt the participant will hand in later.
+  await page.click('#add-more .add-manual');
+  const manual = page.locator('.receipt').nth(files.length);
+  await manual.locator('[name=amount]').fill('30');
+  await manual.locator('[name=currency]').selectOption('EUR');
+  await manual.locator('[name=date]').fill('2026-08-18');
+  await manual.locator('[name=transport]').selectOption('BUS');
+  await manual.locator('[name=fromCity]').fill('Sofia');
+  await manual.locator('[name=fromCountry]').selectOption('Bulgaria');
+  await manual.locator('[name=toCity]').fill('Budapest');
+  await manual.locator('[name=toCountry]').selectOption('Hungary');
+  await shot(page, 'phone-2-manual');
+  await manual.locator('text=Done').click();
+  check((await manual.getAttribute('data-state')) === 'later', 'journey without receipt is accepted as "receipt later"');
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot(page, 'phone-2-list', true);
+  await page.click('[data-theme-toggle]');
+  await shot(page, 'phone-2-list-light', true);
+  await page.click('[data-theme-toggle]');
 
   // Reloading the page keeps the unsent form.
   await page.waitForTimeout(500);
   await page.reload();
   await page.waitForSelector('#restored:not([hidden])');
-  await page.waitForFunction((n) => document.querySelectorAll('.receipt').length === n, files.length);
+  await page.waitForFunction((n) => document.querySelectorAll('.receipt').length === n, files.length + 1);
   const restored = await page.$$eval('.receipt', (els) => els.map((el) => el.dataset.state));
-  check((await page.inputValue('[name=firstName]')) === 'Zsófia' && restored.every((s) => s === 'ready'),
+  check((await page.inputValue('[name=firstName]')) === 'Zsófia' && restored.every((s) => s === 'ready' || s === 'later') && restored.at(-1) === 'later',
     `reloaded page restores the details and all receipts (${restored.join(', ')})`);
 
   await page.click('#next');
@@ -208,6 +224,7 @@ try {
   await page.click('#next'); // Send
   await page.waitForSelector('#done-view:not([hidden])', { timeout: 60_000 });
   console.log(`Phone: ${await page.textContent('#done-text')}`);
+  check(await page.isVisible('#done-later li:has-text("Sofia → Budapest")'), 'done screen reminds which receipt to hand in');
   await shot(page, 'phone-4-done');
   if (problems.length) check(false, 'phone console errors:\n  ' + problems.join('\n  '));
 
@@ -227,7 +244,8 @@ try {
   await adminPage.click('.tabs >> text=Overview');
   await adminPage.waitForSelector('.checklist');
   const total = await adminPage.textContent('.tile.accent strong');
-  check(total === '110.43 EUR', `admin group total: ${total}`);
+  check(total === '140.43 EUR', `admin group total (with the journey without receipt): ${total}`);
+  check(await adminPage.isVisible('text=Collect the missing receipts'), 'overview asks to collect the missing receipt');
   await shot(adminPage, 'admin-overview', true);
 
   await adminPage.click('.tabs >> text=Participants');
@@ -241,7 +259,14 @@ try {
   await amount.press('Tab');
   await adminPage.waitForSelector('.toast.show:has-text("amount saved")');
   const after = await adminPage.textContent('.tile.accent strong');
-  check(after === '109.57 EUR', `autosaved correction updates the total: ${after}`);
+  check(after === '139.57 EUR', `autosaved correction updates the total: ${after}`);
+  await shot(adminPage, 'admin-missing-receipt', true);
+  // The participant hands in the missing receipt: photograph it on the tablet.
+  const chooser = adminPage.waitForEvent('filechooser');
+  await adminPage.click('.preview.missing >> text=Add photo / PDF');
+  await (await chooser).setFiles(files[0]);
+  await adminPage.waitForSelector('.toast.show:has-text("added")');
+  check((await adminPage.locator('.preview.missing').count()) === 0, 'missing receipt attached later on the tablet');
   await adminPage.click('.preview >> nth=0');
   await adminPage.waitForSelector('#viewer[open]');
   await shot(adminPage, 'admin-viewer');
@@ -280,6 +305,8 @@ try {
   await adminPage.click('.project-head >> text=Make active');
   await adminPage.waitForSelector('text=Active – phones send here');
   check(true, 'first project re-activated');
+  await adminPage.click('[data-theme-toggle]');
+  await shot(adminPage, 'admin-old-project-light');
   await adminPage.click('#lock');
   await adminPage.waitForSelector('.pin-card');
   const lockedApi = await tablet.request.get(`http://localhost:${port}/api/admin/overview`);

@@ -10,7 +10,7 @@ import { groupSummary } from './money.js';
 import { isLoopback, lanAddresses } from './network.js';
 import { createPinLock } from './pin.js';
 import { newProject } from './store.js';
-import { submissionHandler } from './submit.js';
+import { checkUpload, receiveMultipart, removeTemp, submissionHandler } from './submit.js';
 import { validateDetails, validateProject, validateRates, validateReceipt, ValidationError } from './validate.js';
 
 const ROOT = path.join(import.meta.dirname, '..');
@@ -122,7 +122,8 @@ function projectState(project) {
         eur: r.eur,
         editedAt: r.editedAt || null,
         submitted: r.submitted,
-        file: { originalName: r.file.originalName, mime: r.file.mime, size: r.file.size },
+        file: r.file && { originalName: r.file.originalName, mime: r.file.mime, size: r.file.size },
+        paperReceived: r.paperReceived === true,
       })),
     })),
   };
@@ -278,11 +279,41 @@ export function createApp(store, { pin = ADMIN_PIN } = {}) {
   admin.get('/projects/:pid/users/:id/receipts/:rid/file', (req, res) => {
     const { pid, id, rid } = req.params;
     const receipt = getReceipt(pid, id, rid);
+    if (!receipt.file) throw notFound('This receipt has not been handed in yet.');
     if (req.query.download) res.attachment(receipt.file.originalName);
     // Images can never run scripts; PDFs open in the browser's own viewer.
     if (receipt.file.mime.startsWith('image/')) res.set('Content-Security-Policy', "sandbox; default-src 'none'; img-src 'self'");
     res.type(receipt.file.mime);
     res.sendFile(path.join(store.userDir(pid, id), receipt.file.storedName));
+  });
+
+  // Adds the photo or PDF for a journey that was sent without its receipt.
+  // Originals that are already stored are never replaced.
+  admin.post('/projects/:pid/users/:id/receipts/:rid/file', async (req, res) => {
+    const { pid, id, rid } = req.params;
+    getReceipt(pid, id, rid);
+    let files = new Map();
+    try {
+      const received = await receiveMultipart(req, store.tmpDir);
+      files = received.files;
+      if (received.failure) throw received.failure;
+      const upload = files.get('file0');
+      if (!upload) throw new ValidationError({ file: 'No file was sent.' });
+      const file = checkUpload(upload, 'Receipt');
+      await store.update(async () => {
+        const receipt = getReceipt(pid, id, rid);
+        if (receipt.file) throw new ValidationError({ file: 'This receipt already has a file.' });
+        const dir = store.userDir(pid, id);
+        await fs.mkdir(dir, { recursive: true });
+        const storedName = `${String(receipt.number).padStart(2, '0')}-${receipt.id}${file.ext}`;
+        await fs.rename(file.tmpPath, path.join(dir, storedName));
+        const { tmpPath, ext, ...stored } = file;
+        receipt.file = { ...stored, storedName, addedByAdmin: new Date().toISOString() };
+      });
+      ok(res);
+    } finally {
+      await removeTemp(files);
+    }
   });
 
   admin.get('/projects/:pid/users/:id/form.pdf', async (req, res) => {

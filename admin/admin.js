@@ -244,6 +244,7 @@ function renderOverview() {
   const { totals, users, project } = data;
   const checked = users.filter((u) => u.reviewed).length;
   const nextToCheck = users.find((u) => !u.reviewed);
+  const toCollect = users.filter((u) => receiptsToCollect(u).length);
   const active = project.id === overview.activeProjectId;
   const step = (done, title, text, action) =>
     h('li', { class: done === true ? 'done' : done === 'warn' ? 'warn' : '' },
@@ -251,7 +252,7 @@ function renderOverview() {
       h('div', { class: 'step-text' }, h('strong', {}, title), h('span', { class: 'muted' }, text)),
       action,
     );
-  const link = (label, href, primary = false) => h('a', { class: `button ${primary ? 'primary' : ''}`, href }, label);
+  const link = (label, href, primary = false, onclick = null) => h('a', { class: `button ${primary ? 'primary' : ''}`, href, onclick }, label);
 
   return [
     h('div', { class: 'tiles' },
@@ -288,6 +289,11 @@ function renderOverview() {
           users.length ? `${checked} of ${users.length} checked. Compare each receipt with its photo and fix anything wrong.` : 'Nothing to check yet.',
           nextToCheck ? link('Check next', userHref(nextToCheck), true) : null,
         ),
+        toCollect.length
+          ? step('warn', 'Collect the missing receipts',
+              collectText(toCollect),
+              link('See who', tabHref('people'), false, () => (filter = 'collect')))
+          : null,
         step(false, 'Print the forms and export', 'Print the forms for signing and save the Excel and ZIP files.', link('Print & export', tabHref('exports'))),
       ),
     ),
@@ -296,12 +302,25 @@ function renderOverview() {
 
 // ---------- participants ----------
 
+// Journeys sent without a receipt that has not been handed in yet.
+function receiptsToCollect(u) {
+  return u.receipts.filter((r) => r.status === 'accepted' && !r.file && !r.paperReceived);
+}
+
 function problems(u) {
   const list = [];
+  const missing = receiptsToCollect(u).length;
+  if (missing) list.push(`${missing} receipt${missing === 1 ? '' : 's'} to collect`);
   if (u.missingRates.length) list.push(`no rate: ${u.missingRates.join(', ')}`);
   const incomplete = u.receipts.filter((r) => r.status === 'accepted' && (!r.date || !r.transport || !r.fromCity || !r.toCity)).length;
   if (incomplete) list.push(`${incomplete} incomplete receipt${incomplete === 1 ? '' : 's'}`);
   return list;
+}
+
+function collectText(users) {
+  const n = users.reduce((sum, u) => sum + receiptsToCollect(u).length, 0);
+  const who = users.map((u) => `${u.firstName} ${u.lastName}`).join(', ');
+  return `${n} journey${n === 1 ? ' was' : 's were'} sent without a receipt (${who}). Add a photo when you get ${n === 1 ? 'it' : 'them'}, or tick “Received on paper”.`;
 }
 
 function renderPeople() {
@@ -310,10 +329,11 @@ function renderPeople() {
     todo: data.users.filter((u) => !u.reviewed).length,
     checked: data.users.filter((u) => u.reviewed).length,
     problems: data.users.filter((u) => problems(u).length).length,
+    collect: data.users.filter((u) => receiptsToCollect(u).length).length,
   };
   const term = search.toLowerCase();
   const users = data.users
-    .filter((u) => filter === 'all' || (filter === 'todo' && !u.reviewed) || (filter === 'checked' && u.reviewed) || (filter === 'problems' && problems(u).length))
+    .filter((u) => filter === 'all' || (filter === 'todo' && !u.reviewed) || (filter === 'checked' && u.reviewed) || (filter === 'problems' && problems(u).length) || (filter === 'collect' && receiptsToCollect(u).length))
     .filter((u) => !term || `${u.firstName} ${u.lastName} ${u.email} ${u.country}`.toLowerCase().includes(term));
 
   const searchBox = h('input', {
@@ -324,7 +344,7 @@ function renderPeople() {
     },
   });
   const filters = h('div', { class: 'segmented' },
-    [['all', 'All'], ['todo', 'To check'], ['checked', 'Checked'], ['problems', 'Problems']].map(([id, label]) =>
+    [['all', 'All'], ['todo', 'To check'], ['checked', 'Checked'], ['collect', 'Receipts to collect'], ['problems', 'Problems']].map(([id, label]) =>
       h('button', { type: 'button', class: id === filter ? 'on' : '', onclick: () => ((filter = id), render()) }, `${label} (${counts[id]})`)),
   );
 
@@ -419,6 +439,9 @@ function renderExports() {
       ? h('p', { class: 'warning' }, `Exchange rates are missing for ${totals.missingRates.join(', ')}: those receipts are left out. `, h('a', { href: tabHref('rates') }, 'Set rates'))
       : null,
     unchecked ? h('p', { class: 'warning soft' }, `${unchecked} participant${unchecked === 1 ? ' has' : 's have'} not been checked yet.`) : null,
+    users.some((u) => receiptsToCollect(u).length)
+      ? h('p', { class: 'warning soft' }, 'Some receipts have not been handed in yet. Their journeys are on the forms, but the ZIP only has the receipts you already have.')
+      : null,
     h('div', { class: 'export-grid' },
       card('Forms to print', 'One “Travel costs reimbursement form” per participant, one page each, ready to print and sign.', projectUrl('/export/forms.pdf'), 'Download forms (PDF)', true),
       card('Excel summary', 'One row per participant with their total, the group total, every receipt, and the rates used.', projectUrl('/export/summary.xlsx'), 'Download Excel'),
@@ -596,6 +619,22 @@ function renderUser(user) {
   ];
 }
 
+// Adds the photo or PDF of a receipt handed in after the form was sent.
+function attachReceipt(user, r) {
+  const input = h('input', { type: 'file', accept: 'image/*,application/pdf,.pdf,.heic,.heif' });
+  input.addEventListener('change', () => {
+    if (!input.files[0]) return;
+    const body = new FormData();
+    body.append('file0', input.files[0], input.files[0].name);
+    save(async () => {
+      const res = await fetch(projectUrl(`/users/${user.id}/receipts/${r.id}/file`), { method: 'POST', headers: { 'X-Admin': '1' }, body });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Upload failed.');
+    }, `Receipt ${r.number} added`);
+  });
+  input.click();
+}
+
 function renderReceipt(user, r) {
   const file = projectUrl(`/users/${user.id}/receipts/${r.id}/file`);
   const patch = (body, message = 'Saved') => save(() => api('PATCH', projectUrl(`/users/${user.id}/receipts/${r.id}`), body), message);
@@ -609,8 +648,14 @@ function renderReceipt(user, r) {
     const options = value && !list.includes(value) ? [...list, value] : list;
     return h('select', {}, h('option', { value: '' }, '—'), options.map((c) => h('option', { value: c, selected: c === value }, c)));
   };
-  const isImage = r.file.mime.startsWith('image/') && r.file.mime !== 'image/heic';
-  const preview = isImage
+  const isImage = r.file && r.file.mime.startsWith('image/') && r.file.mime !== 'image/heic';
+  const preview = !r.file
+    ? h('div', { class: `preview missing ${r.paperReceived ? 'paper' : ''}` },
+        h('span', { class: 'missing-icon' }, r.paperReceived ? '✓' : '!'),
+        h('span', {}, r.paperReceived ? 'Received on paper' : 'No receipt yet'),
+        h('button', { type: 'button', class: 'button small-button', onclick: () => attachReceipt(user, r) }, 'Add photo / PDF'),
+      )
+    : isImage
     ? h('button', { type: 'button', class: 'preview', onclick: () => openViewer(file, `Receipt ${r.number} · ${r.file.originalName}`) },
         h('img', { src: file, alt: `Receipt ${r.number}`, loading: 'lazy' }), h('span', { class: 'zoom' }, 'Enlarge'))
     : h('a', { href: file, target: '_blank', class: 'preview doc' }, r.file.mime === 'application/pdf' ? 'PDF' : 'HEIC', h('span', { class: 'zoom' }, 'Open'));
@@ -625,8 +670,11 @@ function renderReceipt(user, r) {
     h('div', { class: 'receipt-form' },
       h('div', { class: 'receipt-top' },
         h('strong', {}, `#${r.number}`),
-        h('span', { class: 'muted file-name' }, `${r.file.originalName} · ${formatSize(r.file.size)}`),
-        h('a', { href: `${file}?download=1` }, 'Download'),
+        r.file
+          ? [h('span', { class: 'muted file-name' }, `${r.file.originalName} · ${formatSize(r.file.size)}`), h('a', { href: `${file}?download=1` }, 'Download')]
+          : h('label', { class: 'check' },
+              h('input', { type: 'checkbox', checked: r.paperReceived, onchange: (e) => patch({ paperReceived: e.target.checked }, e.target.checked ? `Receipt ${r.number} received on paper` : `Receipt ${r.number} marked as missing`) }),
+              'Received on paper'),
         h('div', { class: 'segmented small' },
           h('button', { type: 'button', class: counted ? 'on' : '', onclick: () => !counted && patch({ status: 'accepted' }, `Receipt ${r.number} counted`) }, 'Counted'),
           h('button', { type: 'button', class: !counted ? 'on danger' : '', onclick: () => counted && patch({ status: 'rejected' }, `Receipt ${r.number} rejected`) }, 'Rejected'),

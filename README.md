@@ -30,9 +30,17 @@ once, to install it.
   in the participant's language, the host country's language and English:
   amount, currency, date, means of transport (PLANE, CARPOOLING, BUS, TRAIN)
   and From/To city and country are suggested for the participant to check.
-  From, To, transport and date are required. The unsent form is kept on the
-  phone, so a reload (common after taking a photo) loses nothing.
-  Participants can send only once.
+  From, To, transport and date are required. A journey can also be typed in
+  without its receipt ("Journey without receipt"); it counts like any other
+  and the receipt is handed in later. The unsent form is kept on the phone,
+  so a reload (common after taking a photo) loses nothing. Participants can
+  send only once.
+- **Receipts handed in later**: the admin view lists them ("Receipts to
+  collect"). Add the photo or PDF on the participant's page when you get it,
+  or tick "Received on paper". The Excel marks each journey's receipt as
+  attached, on paper or missing.
+- **Dark mode** is the default on phones and the tablet; the ☀ / ☾ button in
+  the top bar switches to light mode (remembered on that device).
 - **Admin view** has tabs: *Overview* (a checklist of what to do next),
   *Participants* (filter by to check / checked / problems), *Exchange rates*,
   *Print & export* and *Project*. On a participant's page every change is

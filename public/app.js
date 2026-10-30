@@ -67,7 +67,7 @@ $('#next').addEventListener('click', () => {
     if (details.reportValidity()) showStep(2);
   } else if (step === 2) {
     if (!receipts.length) {
-      toast('Add at least one ticket or receipt first.');
+      toast('Add at least one ticket or receipt, or type in a journey, first.');
       return;
     }
     const incomplete = receipts.find((r) => missingFields(r).length);
@@ -84,36 +84,90 @@ $('#next').addEventListener('click', () => {
 
 // ---------- receipts ----------
 
-function addFiles(files, saved = []) {
-  for (const [i, file] of [...files].entries()) {
+function sameFile(a, b) {
+  return a && b && a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+}
+
+function fileProblem(file) {
+  if (file.size > config.LIMITS.maxFileBytes) return `${file.name} is larger than ${config.LIMITS.maxFileBytes / 1024 / 1024} MB and cannot be sent.`;
+  if (receipts.some((r) => sameFile(r.file, file))) return `${file.name} is already in your list.`;
+  return null;
+}
+
+// `file` is null for a journey typed in by hand, whose receipt comes later.
+function addReceipt(file, restore = null) {
+  const receipt = {
+    key: nextKey++,
+    file,
+    lang: restore?.lang || 'auto',
+    status: !file ? 'manual' : restore && ['done', 'failed'].includes(restore.status) ? restore.status : 'queued',
+    progress: 0,
+    touched: new Set(restore?.touched || []),
+    scan: restore?.scan || null,
+    thumbnail: restore?.thumbnail || null,
+  };
+  buildReceipt(receipt);
+  if (restore) for (const f of FIELDS) receipt.el[f].value = restore.values[f] ?? '';
+  receipts.push(receipt);
+  list.append(receipt.el.item);
+  updateReceipt(receipt);
+  return receipt;
+}
+
+function addFiles(files) {
+  const skipped = [];
+  let added = 0;
+  for (const file of files) {
     if (receipts.length >= config.LIMITS.maxReceipts) {
-      alert(`You can add at most ${config.LIMITS.maxReceipts} receipts.`);
+      skipped.push(`You can add at most ${config.LIMITS.maxReceipts} receipts.`);
       break;
     }
-    if (file.size > config.LIMITS.maxFileBytes) {
-      alert(`${file.name} is larger than ${config.LIMITS.maxFileBytes / 1024 / 1024} MB and cannot be sent.`);
-      continue;
+    const problem = fileProblem(file);
+    if (problem) skipped.push(problem);
+    else {
+      addReceipt(file);
+      added += 1;
     }
-    const restore = saved[i];
-    const receipt = {
-      key: nextKey++,
-      file,
-      lang: restore?.lang || 'auto',
-      status: restore && ['done', 'failed'].includes(restore.status) ? restore.status : 'queued',
-      progress: 0,
-      touched: new Set(restore?.touched || []),
-      scan: restore?.scan || null,
-      thumbnail: restore?.thumbnail || null,
-    };
-    buildReceipt(receipt);
-    if (restore) for (const f of FIELDS) receipt.el[f].value = restore.values[f] ?? '';
-    receipts.push(receipt);
-    list.append(receipt.el.item);
-    updateReceipt(receipt);
   }
   refreshList();
   processQueue();
   scheduleSave();
+  if (skipped.length) alert(skipped.join('\n'));
+  return added;
+}
+
+function addManualJourney() {
+  if (receipts.length >= config.LIMITS.maxReceipts) {
+    alert(`You can add at most ${config.LIMITS.maxReceipts} receipts.`);
+    return;
+  }
+  const receipt = addReceipt(null);
+  receipt.el.currency.value = countryDefaults().currency;
+  refreshList();
+  scheduleSave();
+  openReceipt(receipt.key);
+}
+
+// A journey typed in by hand gets its photo after all (found before sending).
+function attachFile(receipt) {
+  const input = h('input', { type: 'file', accept: 'image/*,application/pdf,.pdf,.heic,.heif' });
+  input.addEventListener('change', () => {
+    const file = input.files[0];
+    if (!file) return;
+    const problem = fileProblem(file);
+    if (problem) {
+      alert(problem);
+      return;
+    }
+    receipt.file = file;
+    receipt.status = 'queued';
+    setThumb(receipt);
+    receipt.el.item.classList.remove('no-file');
+    refreshList();
+    processQueue();
+    scheduleSave();
+  });
+  input.click();
 }
 
 function buildReceipt(receipt) {
@@ -122,7 +176,7 @@ function buildReceipt(receipt) {
     input.name = name;
     input.addEventListener('input', () => {
       receipt.touched.add(name);
-      updateReceipt(receipt);
+      refreshList();
       scheduleSave();
     });
     el[name] = input;
@@ -164,8 +218,13 @@ function buildReceipt(receipt) {
     h('option', { value: 'auto' }, 'Automatic'),
     Object.entries(config.OCR_LANGUAGES).map(([code, name]) => h('option', { value: code, selected: code === receipt.lang }, name)));
 
+  el.later = h('div', { class: 'later-box' },
+    h('p', {}, 'No receipt yet: give the receipt or invoice for this journey to the organiser later.'),
+    h('button', { type: 'button', class: 'button', onclick: () => attachFile(receipt) }, 'I have it now: add photo or file'),
+  );
   el.editor = h('div', { class: 'editor', hidden: true },
     h('div', { class: 'reading-box' }, el.status, el.bar),
+    el.later,
     h('div', { class: 'pair' },
       h('label', {}, 'Amount paid', field('amount', h('input', { inputmode: 'decimal', autocomplete: 'off', placeholder: '0.00' }))),
       h('label', {}, 'Currency', field('currency', h('select', {}, config.CURRENCIES.map((c) => h('option', { value: c }, c))))),
@@ -180,7 +239,7 @@ function buildReceipt(receipt) {
     place('From', 'from'),
     h('div', { class: 'swap-row' }, h('button', { type: 'button', class: 'link', onclick: swap }, '⇅ Swap From and To')),
     place('To', 'to'),
-    h('details', { class: 'reread' },
+    el.reread = h('details', { class: 'reread' },
       h('summary', {}, 'Details read wrong?'),
       h('p', { class: 'hint small' }, 'Pick the language the receipt is written in and read it again. Values you typed yourself are kept.'),
       h('div', { class: 'pair' }, el.lang, h('button', { type: 'button', class: 'button', onclick: () => rescan(receipt) }, 'Read again')),
@@ -190,7 +249,7 @@ function buildReceipt(receipt) {
       h('button', { type: 'button', class: 'button primary', onclick: () => finishEditing(receipt) }, 'Done'),
     ),
   );
-  el.item = h('li', { class: 'receipt' }, el.row, el.editor);
+  el.item = h('li', { class: `receipt ${receipt.file ? '' : 'no-file'}` }, el.row, el.editor);
   receipt.el = el;
   el.currency.value = countryDefaults().currency;
   setThumb(receipt);
@@ -198,6 +257,10 @@ function buildReceipt(receipt) {
 
 function setThumb(receipt) {
   const { thumb } = receipt.el;
+  if (!receipt.file) {
+    thumb.replaceChildren(h('span', { class: 'no-receipt', title: 'No receipt yet' }, '✎'));
+    return;
+  }
   const src = receipt.thumbnail || (isPdf(receipt.file) ? null : URL.createObjectURL(receipt.file));
   thumb.replaceChildren(src ? h('img', { alt: '', src, onerror: (e) => e.target.replaceWith(isPdf(receipt.file) ? 'PDF' : 'IMG') }) : 'PDF');
 }
@@ -212,7 +275,8 @@ function missingFields(receipt) {
 
 function receiptState(receipt) {
   if (receipt.status === 'queued' || receipt.status === 'reading') return 'reading';
-  return missingFields(receipt).length ? 'incomplete' : 'ready';
+  if (missingFields(receipt).length) return 'incomplete';
+  return receipt.file ? 'ready' : 'later';
 }
 
 function updateReceipt(receipt) {
@@ -224,15 +288,17 @@ function updateReceipt(receipt) {
 
   const from = value(receipt, 'fromCity');
   const to = value(receipt, 'toCity');
-  el.title.textContent = from || to ? `${from || '?'} → ${to || '?'}` : receipt.file.name || `Receipt ${n}`;
+  el.title.textContent = from || to ? `${from || '?'} → ${to || '?'}` : receipt.file?.name || `Journey ${n}`;
   const amount = parseAmount(value(receipt, 'amount'));
   const transport = el.transport.value;
   el.subtitle.textContent = [
     transport && transport[0] + transport.slice(1).toLowerCase(),
     el.date.value && formatDate(el.date.value),
     amount && `${formatMoney(amount)} ${el.currency.value}`,
-  ].filter(Boolean).join(' · ') || formatSize(receipt.file.size);
-  el.chip.textContent = state === 'reading' ? 'Reading…' : state === 'ready' ? '✓ Ready' : 'Needs details';
+  ].filter(Boolean).join(' · ') || (receipt.file ? formatSize(receipt.file.size) : 'Typed in by hand');
+  el.chip.textContent = { reading: 'Reading…', ready: '✓ Ready', later: '✓ Receipt later', incomplete: 'Needs details' }[state];
+  el.later.hidden = Boolean(receipt.file);
+  el.reread.hidden = !receipt.file;
   el.chip.className = `chip ${state}`;
 
   el.bar.hidden = state !== 'reading';
@@ -242,6 +308,7 @@ function updateReceipt(receipt) {
     receipt.status === 'queued' ? 'Waiting to be read…'
     : receipt.status === 'reading' ? 'Reading the receipt… you can already fill in details.'
     : receipt.status === 'failed' ? 'We could not read this file. Please type the details.'
+    : !receipt.file && missing.length ? `Type in this journey: ${missing.join(', ')}.`
     : missing.length ? `Please add: ${missing.join(', ')}.`
     : 'All set. Please check the values are correct.';
   el.status.className = `reading ${state}`;
@@ -251,15 +318,19 @@ function refreshList() {
   receipts.forEach(updateReceipt);
   const has = receipts.length > 0;
   $('#add-more').hidden = !has;
+  // Once there are receipts the explanation is no longer needed; the list gets the room.
+  document.querySelectorAll('.intro-only').forEach((el) => (el.hidden = has));
   const summary = $('#receipt-summary');
   summary.hidden = !has;
   if (has) {
-    const counts = { ready: 0, incomplete: 0, reading: 0 };
+    const counts = { ready: 0, later: 0, incomplete: 0, reading: 0 };
     receipts.forEach((r) => (counts[receiptState(r)] += 1));
+    counts.ready += counts.later;
     summary.replaceChildren(
       ...[
-        h('strong', {}, `${receipts.length} receipt${receipts.length === 1 ? '' : 's'}`),
+        h('strong', {}, `${receipts.length} journey${receipts.length === 1 ? '' : 's'}`),
         counts.ready && h('span', { class: 'chip ready' }, `${counts.ready} ready`),
+        counts.later && h('span', { class: 'chip later' }, `${counts.later} receipt${counts.later === 1 ? '' : 's'} to hand in later`),
         counts.incomplete && h('span', { class: 'chip incomplete' }, `${counts.incomplete} need details`),
         counts.reading && h('span', { class: 'chip reading' }, `${counts.reading} reading`),
       ].filter(Boolean),
@@ -282,6 +353,7 @@ function openReceipt(key) {
 function finishEditing(receipt) {
   // Move straight on to the next receipt that still needs something.
   const next = receipts.find((r) => r !== receipt && receiptState(r) === 'incomplete');
+  if (!receipt.file && !missingFields(receipt).length) toast('Saved. Remember to give this receipt to the organiser later.');
   openReceipt(next ? next.key : null);
   if (!next) receipt.el.item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -375,6 +447,11 @@ function renderReview() {
     ].flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]),
   );
   $('#review-title').textContent = `Journeys (${receipts.length})`;
+  const later = receipts.filter((r) => !r.file).length;
+  $('#review-later').hidden = !later;
+  $('#review-later').textContent = later
+    ? `${later} journey${later === 1 ? ' has' : 's have'} no receipt yet. You can still send now: give ${later === 1 ? 'that receipt' : 'those receipts'} to the organiser later.`
+    : '';
   const totals = {};
   $('#review-receipts').replaceChildren(
     ...receipts.map((r) => {
@@ -384,6 +461,7 @@ function renderReview() {
         h('div', {},
           h('strong', {}, `${value(r, 'fromCity')} → ${value(r, 'toCity')}`),
           h('span', { class: 'muted' }, `${r.el.transport.value[0] + r.el.transport.value.slice(1).toLowerCase()} · ${formatDate(r.el.date.value)}`),
+          r.file ? null : h('span', { class: 'chip later' }, 'Receipt later'),
         ),
         h('strong', { class: 'amount' }, `${formatMoney(amount)} ${r.el.currency.value}`),
       );
@@ -419,7 +497,7 @@ function payload() {
     email: details.email.value.trim(),
     country: details.country.value,
     receipts: receipts.map((r, i) => ({
-      field: `file${i}`,
+      ...(r.file ? { field: `file${i}` } : { noReceipt: true }),
       ...Object.fromEntries(FIELDS.map((f) => [f, value(r, f)])),
       amount: parseAmount(value(r, 'amount')),
       scan: r.scan,
@@ -430,7 +508,7 @@ function payload() {
 function upload(data) {
   const body = new FormData();
   body.append('data', JSON.stringify(data));
-  receipts.forEach((r, i) => body.append(`file${i}`, r.file, r.file.name || `receipt-${i + 1}`));
+  receipts.forEach((r, i) => r.file && body.append(`file${i}`, r.file, r.file.name || `receipt-${i + 1}`));
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/submissions');
@@ -454,7 +532,7 @@ function upload(data) {
 
 async function send() {
   showError('');
-  if (!confirm(`Send ${receipts.length} receipt${receipts.length === 1 ? '' : 's'} now? You cannot change them afterwards.`)) return;
+  if (!confirm(`Send ${receipts.length} journey${receipts.length === 1 ? '' : 's'} now? You cannot change them afterwards.`)) return;
   const button = $('#next');
   button.disabled = true;
   $('#back').disabled = true;
@@ -465,7 +543,12 @@ async function send() {
     await clearDraft();
     $('#form-view').hidden = true;
     $('#done-view').hidden = false;
-    $('#done-text').textContent = `${details.firstName.value.trim()}, your ${result.receiptCount} receipt${result.receiptCount === 1 ? ' was' : 's were'} received. Your participant number is ${result.number}.`;
+    $('#done-text').textContent = `${details.firstName.value.trim()}, your ${result.receiptCount} journey${result.receiptCount === 1 ? ' was' : 's were'} received. Your participant number is ${result.number}.`;
+    const later = receipts.filter((r) => !r.file);
+    $('#done-later').hidden = !later.length;
+    $('#done-later-list').replaceChildren(
+      ...later.map((r) => h('li', {}, `${value(r, 'fromCity')} → ${value(r, 'toCity')}, ${formatDate(r.el.date.value)}, ${formatMoney(parseAmount(value(r, 'amount')))} ${r.el.currency.value}`)),
+    );
     window.scrollTo(0, 0);
   } catch (err) {
     showError(err.message);
@@ -513,7 +596,9 @@ async function restoreDraft() {
   if (!draft) return;
   submissionId = draft.submissionId;
   for (const [k, v] of Object.entries(draft.details)) details[k].value = v;
-  if (draft.receipts.length) addFiles(draft.receipts.map((r) => r.file), draft.receipts);
+  for (const saved of draft.receipts) addReceipt(saved.file, saved);
+  refreshList();
+  processQueue();
   $('#restored').hidden = false;
   return draft.step;
 }
@@ -542,10 +627,9 @@ async function start() {
 
   for (const input of [$('#camera-input'), $('#file-input')]) {
     input.addEventListener('change', () => {
-      const count = input.files.length;
-      addFiles(input.files);
+      const added = addFiles([...input.files]);
       input.value = '';
-      if (count) toast(`${count} receipt${count === 1 ? '' : 's'} added. Add more, or tap one to check it.`);
+      if (added) toast(`${added} receipt${added === 1 ? '' : 's'} added. Add more, or tap one to check it.`);
     });
   }
   $('#start-over').addEventListener('click', async () => {
@@ -554,6 +638,7 @@ async function start() {
     location.reload();
   });
   $('#again').addEventListener('click', () => location.reload());
+  document.querySelectorAll('.add-manual').forEach((b) => b.addEventListener('click', addManualJourney));
   window.addEventListener('beforeunload', (e) => {
     if (!submitted && (receipts.length || details.firstName.value)) e.preventDefault();
   });

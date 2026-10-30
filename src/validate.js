@@ -130,6 +130,7 @@ export function validateReceipt(input, { partial = false, required = false } = {
     out[key] = text(input[key], 60);
     if (out[key] ? !ANY_COUNTRY.has(out[key]) : required) errors[key] = `${ROUTE_LABELS[key]} is required.`;
   }
+  if (input.paperReceived !== undefined) out.paperReceived = input.paperReceived === true;
   if (input.status !== undefined) {
     if (!['accepted', 'rejected'].includes(input.status)) errors.status = 'Unknown status.';
     else out.status = input.status;

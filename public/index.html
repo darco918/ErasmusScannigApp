@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>Travel Expenses</title>
+  <script src="/js/theme.js"></script>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/phone.css">
   <script type="module" src="/app.js"></script>
@@ -15,6 +16,7 @@
       <h1 id="project-title">Travel expenses</h1>
       <p id="project-dates" class="muted"></p>
     </div>
+    <button class="theme-toggle" type="button" data-theme-toggle></button>
   </header>
 
   <!-- File pickers, shared by every "add" button on the page. -->
@@ -71,12 +73,13 @@
     <main class="page step" data-step="2" hidden>
       <section class="card">
         <h2>Your tickets and receipts</h2>
-        <p class="hint">Add one photo or PDF for every journey: plane, bus, train or carpooling. We read each one and fill in the details for you to check.</p>
+        <p class="hint intro-only">Add one photo or PDF for every journey: plane, bus, train or carpooling. We read each one and fill in the details for you to check.</p>
         <div class="add-buttons">
           <label for="camera-input" class="button primary big"><span class="icon" aria-hidden="true">📷</span> Take a photo</label>
           <label for="file-input" class="button big"><span class="icon" aria-hidden="true">📄</span> Choose files</label>
         </div>
-        <p class="hint small">Tip: “Choose files” lets you pick several photos or PDFs at once.</p>
+        <p class="hint small intro-only">Tip: “Choose files” lets you pick several photos or PDFs at once.</p>
+        <button class="link add-manual" type="button">No receipt with you? Type in the journey instead</button>
       </section>
 
       <div id="receipt-summary" class="summary-bar" hidden></div>
@@ -84,6 +87,7 @@
       <div id="add-more" class="add-more" hidden>
         <label for="camera-input" class="button"><span class="icon" aria-hidden="true">📷</span> Add photo</label>
         <label for="file-input" class="button"><span class="icon" aria-hidden="true">📄</span> Add files</label>
+        <button class="button add-manual span-2" type="button"><span class="icon" aria-hidden="true">✎</span> Journey without receipt</button>
       </div>
     </main>
 
@@ -102,6 +106,7 @@
           <button class="link" type="button" data-goto="2">Change</button>
         </div>
         <ol id="review-receipts" class="review-receipts"></ol>
+        <p id="review-later" class="later-note" hidden></p>
         <p id="review-totals" class="totals"></p>
         <p class="hint small">The organiser converts everything to EUR.</p>
       </section>
@@ -126,6 +131,10 @@
       <div class="done-mark" aria-hidden="true">✓</div>
       <h2>Thank you!</h2>
       <p id="done-text"></p>
+      <div id="done-later" class="later-box" hidden>
+        <p><strong>Still to give the organiser:</strong> the receipts for</p>
+        <ul id="done-later-list"></ul>
+      </div>
       <p class="hint">You can close this page. The organiser will print your form for you to sign.</p>
       <button id="again" class="button" type="button">Fill in a form for someone else</button>
     </section>

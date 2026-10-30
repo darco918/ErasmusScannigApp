@@ -75,7 +75,7 @@ export async function renderWorkbook(project, users) {
     { header: `Rate (1 ${BASE_CURRENCY} =)`, key: 'rate', width: 14 }, // L
     { header: `Amount ${BASE_CURRENCY}`, key: 'eur', width: 13, style: { numFmt: MONEY } }, // M
     { header: 'Status', key: 'status', width: 10 }, // N
-    { header: 'Original file', key: 'file', width: 30 }, // O
+    { header: 'Receipt', key: 'file', width: 30 }, // O
   ];
   for (const s of group.perUser) {
     for (const r of s.receipts) {
@@ -92,7 +92,7 @@ export async function renderWorkbook(project, users) {
         amount: r.amount,
         currency: r.currency,
         status: r.status === 'accepted' ? 'Accepted' : 'Rejected',
-        file: r.file.originalName,
+        file: r.file ? r.file.originalName : r.paperReceived ? 'Handed in on paper' : 'MISSING – to be handed in',
       });
       const n = row.number;
       row.getCell('rate').value = { formula: `IFERROR(VLOOKUP(K${n},${rateRange},2,FALSE),"")`, result: r.rate ?? '' };

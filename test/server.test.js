@@ -48,7 +48,7 @@ after(async () => {
 const admin = (url, init = {}) =>
   fetch(`${base}/api/admin${url}`, {
     ...init,
-    headers: { 'X-Admin': '1', Cookie: cookie, ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
+    headers: { 'X-Admin': '1', Cookie: cookie, ...(typeof init.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
   });
 
 async function unlock(pin = '080900') {
@@ -323,6 +323,43 @@ test('a new project starts empty; the old one is kept and can be reactivated', a
   assert.equal((await json(await admin('/overview'))).activeProjectId, projectId);
   const backups = await fs.readdir(path.join(dataDir, 'backups'));
   assert.equal(backups.length, 1);
+});
+
+test('a journey can be sent without its receipt and the file added later', async () => {
+  const { form } = submission(projectId, {
+    firstName: 'Late', lastName: 'Receipt', email: 'late@example.com',
+    receipts: [
+      { field: 'file0', amount: 10, currency: 'EUR', ...journey },
+      { noReceipt: true, amount: 55, currency: 'EUR', ...journey, transport: 'PLANE' },
+    ],
+  }, [['file0', PNG, 'a.png']]);
+  assert.equal((await post(form)).status, 201);
+  let state = await json(await admin(`/projects/${projectId}`));
+  const user = state.users.find((u) => u.lastName === 'Receipt');
+  const missing = user.receipts[1];
+  assert.equal(missing.file, null);
+  assert.equal(user.totalEur, 65, 'the journey counts while its receipt is pending');
+  assert.equal((await admin(`/projects/${projectId}/users/${user.id}/receipts/${missing.id}/file`)).status, 404);
+
+  // A journey without receipt still needs its details.
+  const incomplete = submission(projectId, { receipts: [{ noReceipt: true, amount: 5, currency: 'EUR', ...journey, date: '' }] }, []);
+  assert.equal((await post(incomplete.form)).status, 400);
+
+  const upload = new FormData();
+  upload.append('file0', new Blob([pdfBytes]), 'ticket.pdf');
+  await json(await admin(`/projects/${projectId}/users/${user.id}/receipts/${missing.id}/file`, { method: 'POST', body: upload }));
+  state = await json(await admin(`/projects/${projectId}`));
+  const attached = state.users.find((u) => u.id === user.id).receipts[1];
+  assert.equal(attached.file.mime, 'application/pdf');
+  const file = await admin(`/projects/${projectId}/users/${user.id}/receipts/${missing.id}/file`);
+  assert.deepEqual(Buffer.from(await file.arrayBuffer()), pdfBytes);
+  // An original already stored is never replaced.
+  const again = new FormData();
+  again.append('file0', new Blob([PNG]), 'other.png');
+  assert.equal((await admin(`/projects/${projectId}/users/${user.id}/receipts/${missing.id}/file`, { method: 'POST', body: again })).status, 400);
+
+  await json(await send('PATCH', `/projects/${projectId}/users/${user.id}/receipts/${user.receipts[0].id}`, { paperReceived: true }));
+  await json(await send('DELETE', `/projects/${projectId}/users/${user.id}`));
 });
 
 test('deleting a participant removes their files', async () => {

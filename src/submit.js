@@ -23,7 +23,7 @@ export function detectFileType(head) {
   return null;
 }
 
-function receiveMultipart(req, tmpDir) {
+export function receiveMultipart(req, tmpDir) {
   return new Promise((resolve, reject) => {
     let busboy;
     try {
@@ -94,8 +94,18 @@ function receiveMultipart(req, tmpDir) {
   });
 }
 
-async function removeTemp(files) {
+export async function removeTemp(files) {
   await Promise.all([...files.values()].map((f) => fsp.rm(f.tmpPath, { force: true })));
+}
+
+// Checks an uploaded file and returns what is stored about it.
+export function checkUpload(file, label) {
+  if (file.truncated) {
+    throw new ValidationError({ receipts: `${label}: file is larger than ${LIMITS.maxFileBytes / 1024 / 1024} MB.` });
+  }
+  const type = detectFileType(file.head);
+  if (!type) throw new ValidationError({ receipts: `${label}: only photos (JPEG, PNG, WebP, HEIC) and PDFs are accepted.` });
+  return { tmpPath: file.tmpPath, originalName: file.originalName.slice(0, 200), mime: type.mime, ext: type.ext, size: file.size, sha256: file.sha256 };
 }
 
 export function submissionHandler(store) {
@@ -143,14 +153,14 @@ export function submissionHandler(store) {
       const used = new Set();
       const receipts = items.map((item, i) => {
         const label = `Receipt ${i + 1}`;
-        const file = files.get(item.field);
-        if (!file || used.has(item.field)) throw new ValidationError({ receipts: `${label}: file is missing.` });
-        used.add(item.field);
-        if (file.truncated) {
-          throw new ValidationError({ receipts: `${label}: file is larger than ${LIMITS.maxFileBytes / 1024 / 1024} MB.` });
+        // A journey can be sent without its receipt, which is handed in later.
+        let file = null;
+        if (!item.noReceipt) {
+          const upload = files.get(item.field);
+          if (!upload || used.has(item.field)) throw new ValidationError({ receipts: `${label}: file is missing.` });
+          used.add(item.field);
+          file = checkUpload(upload, label);
         }
-        const type = detectFileType(file.head);
-        if (!type) throw new ValidationError({ receipts: `${label}: only photos (JPEG, PNG, WebP, HEIC) and PDFs are accepted.` });
         let fields;
         try {
           fields = validateReceipt(
@@ -173,7 +183,7 @@ export function submissionHandler(store) {
         return {
           id: crypto.randomUUID(),
           number: i + 1,
-          file: { tmpPath: file.tmpPath, originalName: file.originalName.slice(0, 200), mime: type.mime, ext: type.ext, size: file.size, sha256: file.sha256 },
+          file,
           ...fields,
           status: 'accepted',
           submitted: { ...fields },
@@ -198,6 +208,7 @@ export function submissionHandler(store) {
         await fsp.mkdir(dir, { recursive: true });
         try {
           for (const r of receipts) {
+            if (!r.file) continue;
             const storedName = `${String(r.number).padStart(2, '0')}-${r.id}${r.file.ext}`;
             await fsp.rename(r.file.tmpPath, path.join(dir, storedName));
             r.file.storedName = storedName;

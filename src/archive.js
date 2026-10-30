@@ -45,6 +45,7 @@ export async function streamArchive(res, store, project, stamp) {
     const folder = `${root}/${safeName(user.country)}/${userFolderName(user)}`;
     zip.append(Buffer.from(await renderDocuments(project, [user])), { name: `${folder}/Form.pdf` });
     for (const r of user.receipts) {
+      if (!r.file) continue; // not handed in yet, or only on paper
       const sub = r.status === 'rejected' ? `${folder}/Rejected` : folder;
       zip.file(path.join(store.userDir(project.id, user.id), r.file.storedName), { name: `${sub}/${receiptFileName(r)}` });
     }

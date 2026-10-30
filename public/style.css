@@ -1,6 +1,7 @@
 :root {
   --bg: #f4f5f7;
   --card: #ffffff;
+  --raised: #eef1f5;
   --text: #1c2430;
   --muted: #5f6b7a;
   --line: #d9dee5;
@@ -11,25 +12,28 @@
   --ok: #1e7a3c;
   --warn: #8a5a00;
   --warn-bg: #fff4d6;
+  --shadow: rgba(0, 0, 0, .08);
   --radius: 10px;
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #12161c;
-    --card: #1b2129;
-    --text: #e8ecf1;
-    --muted: #9aa5b3;
-    --line: #2e3742;
-    --accent: #6ea8ff;
-    --accent-text: #0b1420;
-    --danger: #ff8a80;
-    --danger-bg: #3a1c1a;
-    --ok: #7fd49a;
-    --warn: #f0c060;
-    --warn-bg: #3a2f14;
-  }
+/* Dark is the default (set by /js/theme.js); the toggle in the top bar switches. */
+:root[data-theme="dark"] {
+  --bg: #0f1318;
+  --card: #182029;
+  --raised: #212b36;
+  --text: #e6ebf1;
+  --muted: #9aa7b5;
+  --line: #2c3744;
+  --accent: #6ea8ff;
+  --accent-text: #08111d;
+  --danger: #ff8a80;
+  --danger-bg: #3b1d1b;
+  --ok: #6fd398;
+  --warn: #f2c25b;
+  --warn-bg: #382c12;
+  --shadow: rgba(0, 0, 0, .45);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -55,6 +59,11 @@ body {
   flex-wrap: wrap;
 }
 .topbar h1 { font-size: 1.2rem; margin: 0; }
+.theme-toggle {
+  flex: none; width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--raised); color: var(--text);
+  font-size: 1.2rem; cursor: pointer; display: grid; place-items: center;
+}
 .topbar p { margin: 2px 0 0; }
 
 .page { max-width: 720px; margin: 0 auto; padding: 16px; }
